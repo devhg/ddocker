@@ -1,15 +1,41 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path"
+	"strconv"
 	"syscall"
 )
 
+// 挂载了memory subsystem 的 hierarchy 的根目录
+const (
+	cgroupMemoryHierarchMount = "/sys/fs/cgroup/memory"
+	memoryLimitInBytes        = "memory.limit_in_bytes"
+	memoryTasks               = "tasks"
+)
+
 func main() {
+	if os.Args[0] == "/proc/self/exe" {
+		/*容器进程*/
+		fmt.Printf("current pid %d\n", syscall.Getpid())
+		cmd := exec.Command("sh", "-c", `stress --vm-bytes 200m --vm-keep -m 1`)
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
 	// 用来指定fork出来新进程内的初始命令
-	cmd := exec.Command("sh")
+	cmd := exec.Command("/proc/self/exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
 			syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER |
@@ -26,8 +52,23 @@ func main() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
+	} else {
+		// 得到fork出来进程映射在外部命名空间的pid
+		fmt.Printf("宿主机空间的pid %v\n", cmd.Process.Pid)
+
+		// 1.在系统默认创建挂载了memory subsystem 的Hierarchy上创建cgroup
+		os.Mkdir(path.Join(cgroupMemoryHierarchMount, "testMemorylimit"), 0755)
+
+		// 2.将容器进程加入到这个cgroup
+		containerPid := strconv.Itoa(cmd.Process.Pid)
+		ioutil.WriteFile(path.Join(cgroupMemoryHierarchMount, "testMemorylimit", memoryTasks),
+			[]byte(containerPid), 0644)
+
+		// 3.限制cgroup进程使用
+		ioutil.WriteFile(path.Join(cgroupMemoryHierarchMount, "testMemorylimit", memoryLimitInBytes),
+			[]byte("100m"), 0644)
 	}
-	os.Exit(-1)
+	cmd.Process.Wait()
 }
