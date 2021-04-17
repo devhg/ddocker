@@ -1,16 +1,38 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
-	"log"
+	"github.com/devhg/ddocker/cmd"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 	"os"
-	"os/exec"
-	"path"
-	"strconv"
-	"syscall"
 )
 
+const usage = `ddocker is a simple container runtime implementation.
+			   The purpose of this project is to learn how docker works and how to write a docker by ourselves.
+			   Enjoy it, just for fun (:`
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "ddocker"
+	app.Usage = usage
+
+	app.Commands = []cli.Command{
+		cmd.InitCommand,
+		cmd.RunCommand,
+	}
+
+	app.Before = func(ctx *cli.Context) error {
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+		logrus.SetOutput(os.Stdout)
+		return nil
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		logrus.Fatal(err)
+	}
+}
+
+/*
 // 挂载了memory subsystem 的 hierarchy 的根目录
 const (
 	cgroupMemoryHierarchMount = "/sys/fs/cgroup/memory"
@@ -20,7 +42,7 @@ const (
 
 func main() {
 	if os.Args[0] == "/proc/self/exe" {
-		/*容器进程*/
+		//容器进程
 		fmt.Printf("current pid %d\n", syscall.Getpid())
 		cmd := exec.Command("sh", "-c", `stress --vm-bytes 200m --vm-keep -m 1`)
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -71,4 +93,4 @@ func main() {
 			[]byte("100m"), 0644)
 	}
 	cmd.Process.Wait()
-}
+}*/
