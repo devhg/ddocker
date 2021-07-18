@@ -1,11 +1,13 @@
 package cmd
 
 import (
-	"fmt"
-	"github.com/devhg/ddocker/container"
+	"errors"
+	"os"
+
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"os"
+
+	"github.com/devhg/ddocker/container"
 )
 
 // 需要单测
@@ -28,7 +30,7 @@ var RunCommand = cli.Command{
 	*/
 	Action: func(ctx *cli.Context) error {
 		if len(ctx.Args()) < 1 {
-			return fmt.Errorf("Missing container command")
+			return errors.New("Missing container command")
 		}
 		cmd := ctx.Args().Get(0)
 		tty := ctx.Bool("it")
@@ -60,7 +62,6 @@ var InitCommand = cli.Command{
 	Action: func(ctx *cli.Context) error {
 		logrus.Infof("init come on")
 		cmd := ctx.Args().Get(0)
-		logrus.Infof("command is %s", cmd)
 		err := container.RunContainerInitProcess(cmd, nil)
 		return err
 	},
