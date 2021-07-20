@@ -13,7 +13,7 @@ import (
 // GetCgroupPath 得到cgroup在文件系统的中的绝对路径
 func GetCgroupPath(subsystem string, cgroupPath string, autoCreate bool) (string, error) {
 	cgroupRoot := FindCgroupMountPoint(subsystem)
-	absCgroupPath := path.Join(cgroupRoot, cgroupPath)
+	absCgroupPath := path.Join(cgroupRoot, cgroupPath) // "/sys/fs/cgroup/memory/${cgroupPath}"
 
 	_, err := os.Stat(absCgroupPath)
 	if err == nil {

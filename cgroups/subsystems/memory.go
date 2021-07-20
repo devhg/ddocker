@@ -44,6 +44,7 @@ func (m *MemorySubSystem) Apply(cgroupPath string, pid int) error {
 	}
 
 	// 把进程的PID写到cgroup的虚拟文件系统对应目录下的task文件中
+	// "/sys/fs/cgroup/memory/${cgroupPath}/tasks"
 	dstFile := path.Join(subSysCgroupPath, memoryTasks)
 	if err := ioutil.WriteFile(dstFile, []byte(strconv.Itoa(pid)), 0644); err != nil {
 		return fmt.Errorf("set cgroup proc failed %v", err)

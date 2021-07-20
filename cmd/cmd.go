@@ -3,10 +3,13 @@ package cmd
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
+	"github.com/devhg/ddocker/cgroups"
+	"github.com/devhg/ddocker/cgroups/subsystems"
 	"github.com/devhg/ddocker/container"
 )
 
@@ -32,9 +35,20 @@ var RunCommand = cli.Command{
 		if len(ctx.Args()) < 1 {
 			return errors.New("Missing container command")
 		}
-		cmd := ctx.Args().Get(0)
+
+		var commands []string
+		for _, arg := range ctx.Args() {
+			commands = append(commands, arg)
+		}
+
 		tty := ctx.Bool("it")
-		Run(tty, cmd)
+		resConf := &subsystems.ResourceConfig{
+			MemoryLimit: ctx.String("m"),
+			CpuSet:      ctx.String("cpuset"),
+			CpuShare:    ctx.String("cpushare"),
+		}
+
+		Run(tty, commands, resConf)
 		return nil
 	},
 }
@@ -42,13 +56,25 @@ var RunCommand = cli.Command{
 // Run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func Run(tty bool, command string) {
-	parentProcess := container.NewParentProcess(tty, command)
+func Run(tty bool, commands []string, res *subsystems.ResourceConfig) {
+	parentProcess, writePipe := container.NewParentProcess(tty)
 	if err := parentProcess.Start(); err != nil {
 		logrus.Error(err)
 	}
+
+	// 创建cgroupManager，并调用 Set 设置资源限制 和 Apply 在限制上生效
+	cgroupManager := cgroups.NewCgroupManager("ddocker-cgroup")
+	defer cgroupManager.Destroy()
+
+	// 设置资源限制
+	cgroupManager.Set(res)
+	// 将容器进程加入到各个subsystem挂载对应的cgroup中
+	cgroupManager.Apply(parentProcess.Process.Pid)
+
+	// 初始化容器
+	sendInitCommand(commands, writePipe)
+
 	parentProcess.Wait()
-	os.Exit(-1)
 }
 
 var InitCommand = cli.Command{
@@ -65,4 +91,11 @@ var InitCommand = cli.Command{
 		err := container.RunContainerInitProcess(cmd, nil)
 		return err
 	},
+}
+
+func sendInitCommand(commands []string, writePipe *os.File) {
+	command := strings.Join(commands, " ")
+	logrus.Infof("command all is %s", command)
+	writePipe.WriteString(command)
+	writePipe.Close()
 }
