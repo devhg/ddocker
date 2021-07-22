@@ -42,7 +42,7 @@ func (c *CgroupManager) Destroy() {
 	for _, subSysIns := range subsystems.SubsystemIns {
 		if err := subSysIns.Remove(c.Path); err != nil {
 			logrus.Warnln(err)
-			panic(err)
+			// panic(err)
 		}
 	}
 }

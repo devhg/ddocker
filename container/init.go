@@ -19,9 +19,10 @@ import (
 func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
-		logrus.Errorf("New pip error: %v", err)
+		logrus.Errorf("New pipe error: %v", err)
 	}
 	cmd := exec.Command("/proc/self/exe", "init")
+	logrus.Info(cmd.Args)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
 			syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,

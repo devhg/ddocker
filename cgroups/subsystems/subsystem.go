@@ -26,12 +26,11 @@ type SubSystemer interface {
 
 var SubsystemIns = []SubSystemer{
 	&MemorySubSystem{},
-	&CpuSubsystem{},
-	&CpusetSubSystem{},
+	// &CpuSubsystem{},
+	// &CpusetSubSystem{},
 }
 
 const (
-	cgroupMemoryHierarchMount = "/sys/fs/cgroup/memory"
-	memoryLimitInBytes        = "memory.limit_in_bytes"
-	memoryTasks               = "tasks"
+	memoryLimitInBytes = "memory.limit_in_bytes"
+	memoryTasks        = "tasks"
 )

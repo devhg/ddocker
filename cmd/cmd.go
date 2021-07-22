@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -25,6 +26,10 @@ var RunCommand = cli.Command{
 			Name:  "it",
 			Usage: "enable tty",
 		},
+		cli.StringFlag{
+			Name:  "mm",
+			Usage: "memory limit",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -33,21 +38,22 @@ var RunCommand = cli.Command{
 	*/
 	Action: func(ctx *cli.Context) error {
 		if len(ctx.Args()) < 1 {
-			return errors.New("Missing container command")
+			return errors.New("missing container command")
 		}
 
 		var commands []string
 		for _, arg := range ctx.Args() {
+			fmt.Println(arg)
 			commands = append(commands, arg)
 		}
 
 		tty := ctx.Bool("it")
 		resConf := &subsystems.ResourceConfig{
-			MemoryLimit: ctx.String("m"),
-			CpuSet:      ctx.String("cpuset"),
-			CpuShare:    ctx.String("cpushare"),
+			MemoryLimit: ctx.String("mm"),
+			// CpuSet:      ctx.String("cpuset"),
+			// CpuShare:    ctx.String("cpushare"),
 		}
-
+		fmt.Println(tty)
 		Run(tty, commands, resConf)
 		return nil
 	},
@@ -87,8 +93,7 @@ var InitCommand = cli.Command{
 	*/
 	Action: func(ctx *cli.Context) error {
 		logrus.Infof("init come on")
-		cmd := ctx.Args().Get(0)
-		err := container.RunContainerInitProcess(cmd, nil)
+		err := container.RunContainerInitProcess()
 		return err
 	},
 }

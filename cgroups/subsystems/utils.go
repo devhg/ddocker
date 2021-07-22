@@ -14,7 +14,6 @@ import (
 func GetCgroupPath(subsystem string, cgroupPath string, autoCreate bool) (string, error) {
 	cgroupRoot := FindCgroupMountPoint(subsystem)
 	absCgroupPath := path.Join(cgroupRoot, cgroupPath) // "/sys/fs/cgroup/memory/${cgroupPath}"
-
 	_, err := os.Stat(absCgroupPath)
 	if err == nil {
 		return absCgroupPath, nil
@@ -37,6 +36,7 @@ func GetCgroupPath(subsystem string, cgroupPath string, autoCreate bool) (string
 func FindCgroupMountPoint(subsystem string) string {
 	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
+		logrus.Warnln(err)
 		return ""
 	}
 	defer f.Close()
