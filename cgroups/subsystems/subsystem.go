@@ -25,12 +25,15 @@ type SubSystemer interface {
 }
 
 var SubsystemIns = []SubSystemer{
+	&CpuSubsystem{},
+	// &CpusetSubSystem{}, // ??
+	// Q: {"level":"info","msg":"set cgroup proc failed write /sys/fs/cgroup/cpuset/ddocker-cgroup/tasks: no space left on device","time":"2021-07-25T16:33:09+08:00"}
+	// A: ?
 	&MemorySubSystem{},
-	// &CpuSubsystem{},
-	// &CpusetSubSystem{},
 }
 
 const (
 	memoryLimitInBytes = "memory.limit_in_bytes"
-	memoryTasks        = "tasks"
+	cpuShare           = "cpu.shares"
+	cpuSet             = "cpuset.cpus"
 )

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"strconv"
+
+	"github.com/sirupsen/logrus"
 )
 
 // MemorySubSystem 是 memory subsystem的实现
@@ -38,14 +40,15 @@ func (m *MemorySubSystem) Set(cgroupPath string, res *ResourceConfig) error {
 
 // 将进程添加到某个cgroup中
 func (m *MemorySubSystem) Apply(cgroupPath string, pid int) error {
-	subSysCgroupPath, err := GetCgroupPath(m.Name(), cgroupPath, true)
+	subSysCgroupPath, err := GetCgroupPath(m.Name(), cgroupPath, false)
 	if err != nil {
 		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
 	}
 
 	// 把进程的PID写到cgroup的虚拟文件系统对应目录下的task文件中
 	// "/sys/fs/cgroup/memory/${cgroupPath}/tasks"
-	dstFile := path.Join(subSysCgroupPath, memoryTasks)
+	dstFile := path.Join(subSysCgroupPath, "tasks")
+	logrus.Info(dstFile)
 	if err := ioutil.WriteFile(dstFile, []byte(strconv.Itoa(pid)), 0644); err != nil {
 		return fmt.Errorf("set cgroup proc failed %v", err)
 	}

@@ -30,6 +30,14 @@ var RunCommand = cli.Command{
 			Name:  "mm",
 			Usage: "memory limit",
 		},
+		cli.StringFlag{
+			Name:  "cpushare",
+			Usage: "cpushare limit",
+		},
+		cli.StringFlag{
+			Name:  "cpuset",
+			Usage: "cpuset limit",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -50,10 +58,10 @@ var RunCommand = cli.Command{
 		tty := ctx.Bool("it")
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: ctx.String("mm"),
-			// CpuSet:      ctx.String("cpuset"),
-			// CpuShare:    ctx.String("cpushare"),
+			CpuSet:      ctx.String("cpuset"),
+			CpuShare:    ctx.String("cpushare"),
 		}
-		fmt.Println(tty)
+		fmt.Println(tty, resConf.CpuSet, resConf.CpuShare, resConf.MemoryLimit)
 		Run(tty, commands, resConf)
 		return nil
 	},
@@ -73,10 +81,15 @@ func Run(tty bool, commands []string, res *subsystems.ResourceConfig) {
 	defer cgroupManager.Destroy()
 
 	// 设置资源限制
-	cgroupManager.Set(res)
+	err := cgroupManager.Set(res)
+	if err != nil {
+		panic(err)
+	}
 	// 将容器进程加入到各个subsystem挂载对应的cgroup中
 	cgroupManager.Apply(parentProcess.Process.Pid)
-
+	if err != nil {
+		panic(err)
+	}
 	// 初始化容器
 	sendInitCommand(commands, writePipe)
 

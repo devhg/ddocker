@@ -1,0 +1,4 @@
+stress: FAIL: [7537] (416) <-- worker 7538 got signal 9
+stress: WARN: [7537] (418) now reaping child worker processes
+stress: FAIL: [7537] (452) failed run completed in 407s
+stress: info: [7537] dispatching hogs: 0 cpu, 0 io, 1 vm, 0 hdd
