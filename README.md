@@ -12,6 +12,10 @@
 
 ![ddocker](imgs/cgroup.png)
 
+## create container with pipe
+
+![ddocker](imgs/ddocker-pipe.png)
+
 ## run command
 
 ```bash
@@ -20,6 +24,10 @@ root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# go build .
 root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it -mm 100m stress --vm-bytes 200m --vm-keep -m 1
 
 root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it -mm 100m -cpushare 512 stress --vm-bytes 200m --vm-keep -m 1
+
+root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it ls -l
+
+root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it bash
 ```
 
 ## Q & A

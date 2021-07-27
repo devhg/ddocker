@@ -31,6 +31,10 @@ func RunContainerInitProcess() error {
 		return fmt.Errorf("run container get user command error, cmdArray is nil")
 	}
 
+	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+
+	// 在系统PATH中寻找命令的绝对路径
 	cmdPath, err := exec.LookPath(cmdArray[0])
 	if err != nil {
 		logrus.Errorf("Exec loop path error %v", err)
@@ -45,6 +49,8 @@ func RunContainerInitProcess() error {
 }
 
 func readUserCommand() []string {
+	// 一个进程的创建，默认有三个文件描述符，[标准输入 标准输出 标准错误]
+	// uintptr(3) 是指index=3的文件描述符，也就是传进来管道的一端(readPipe)
 	pipe := os.NewFile(uintptr(3), "pipe")
 	msg, err := ioutil.ReadAll(pipe)
 	if err != nil {
@@ -54,9 +60,3 @@ func readUserCommand() []string {
 	msgStr := string(msg)
 	return strings.Split(msgStr, " ")
 }
-
-// func setUpMount() {
-// defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-// syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
-// argv := []string{}
-// }
