@@ -30,6 +30,11 @@ root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it ls -l
 root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it bash
 ```
 
+## Preview
+
+create a busybox container
+![](./imgs/create-busybox-container.png)
+
 ## Q & A
 
 [Q&A](./problems.md)

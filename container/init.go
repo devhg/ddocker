@@ -33,6 +33,8 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 		cmd.Stderr = os.Stderr
 	}
 	cmd.ExtraFiles = []*os.File{readPipe} // 传入管道读取端的句柄
+
+	cmd.Dir = "/root/busybox" // todo 临时测试
 	return cmd, writePipe
 }
 
