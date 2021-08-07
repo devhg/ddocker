@@ -31,10 +31,10 @@ func RunContainerInitProcess() error {
 	// 在系统PATH中寻找命令的绝对路径
 	cmdPath, err := exec.LookPath(cmdArray[0])
 	if err != nil {
-		logrus.Errorf("Exec loop path error %v", err)
+		logrus.Errorf("exec loop error %v", err)
 		return err
 	}
-	logrus.Infof("Found path is %s", cmdPath)
+	logrus.Infof("found path is %s", cmdPath)
 	logrus.Infoln(cmdPath, cmdArray)
 	if err := syscall.Exec(cmdPath, cmdArray, os.Environ()); err != nil {
 		logrus.Errorln(err.Error())

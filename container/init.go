@@ -26,6 +26,7 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
 			syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+		Unshareflags: syscall.CLONE_NEWNS,
 	}
 	if tty {
 		cmd.Stdin = os.Stdin
