@@ -25,6 +25,7 @@ sh: pstree: 未找到命令
 
 
 5. pivot_root 系统调用似乎没有生效（done）
+
 ![](https://cdn.nlark.com/yuque/0/2021/png/2977669/1627832811471-57c6677a-94a8-4d94-955a-57ca40755a30.png)
 
 **解决**：从ubuntu1404更换到debian10
@@ -36,5 +37,18 @@ sh: pstree: 未找到命令
 >参考： https://lk4d4.darth.io/posts/unpriv3/
 
 7. go tool compile: open /dev/null: no such file or directory
+
 `mknod /dev/null c 1 3`
 > 为什么？这是啥？
+
+8. mount: unknown filesystem type 'aufs'
+
+aufs已经过时了，最新的使用overlay，具体overlay的优势再总结
+
+查看支持的文件系统类型
+
+`cat /proc/filesystems`
+
+overlay挂载方式
+
+`mount -t overlay overlay -o lowerdir=./lower,upperdir=./upper,workdir=./work ./merged`

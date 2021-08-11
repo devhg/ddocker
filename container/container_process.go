@@ -116,3 +116,106 @@ func pivotRoot(root string) error {
 
 	return os.Remove(pivotDir)
 }
+
+func NewWorkSpace(rootURL, mntURL string) {
+	CreateReadOnlyLayer(rootURL)
+	CreateWriteLayer(rootURL)
+	CreateMountPoint(rootURL, mntURL)
+}
+
+func CreateReadOnlyLayer(rootURL string) {
+	busyboxURL := rootURL + "busybox/"
+	busyboxTar := rootURL + "busybox.tar"
+	exist, err := PathExist(busyboxTar)
+	if err != nil {
+		logrus.Infof("failed to judge whether %v exists. %v", busyboxTar, err)
+	}
+
+	if exist {
+		if err := os.Mkdir(busyboxURL, 0777); err != nil {
+			logrus.Errorf("mkdir %v error: %v", busyboxURL, err)
+		}
+
+		if _, err := exec.Command("tar", "-xvf", busyboxTar, "-C", busyboxURL).CombinedOutput(); err != nil {
+			logrus.Errorf("unTar %v error: %v", busyboxTar, err)
+		}
+	}
+}
+
+func CreateWriteLayer(rootURL string) {
+	writeURL := rootURL + "writeLayer/"
+	if err := os.Mkdir(writeURL, 0777); err != nil {
+		logrus.Errorf("mkdir %v error: %v", writeURL, err)
+	}
+
+	// work是overlay必须的，具体为什么？？？？ 暂时放这里吧
+	workURL := rootURL + "work/"
+	if err := os.Mkdir(workURL, 0777); err != nil {
+		logrus.Errorf("mkdir %v error: %v", workURL, err)
+	}
+}
+
+func CreateMountPoint(rootURL, mntURL string) {
+	if err := os.Mkdir(mntURL, 0777); err != nil {
+		logrus.Errorf("mkdir %v error: %v", mntURL, err)
+	}
+
+	// mount: unknown filesystem type 'aufs' aufs已经过时了，改成overlay
+	// cat /proc/filesystems 查看支持的文件系统类型
+	//
+	// mount -t overlay overlay -o lowerdir=./lower,upperdir=./upper,workdir=./work ./merged
+
+	// 把writeLayer目录和busybox目录 mount 到 mnt 目录
+	// todo mount ？？？？？？
+	dirs := fmt.Sprintf("lowerdir=%sbusybox,upperdir=%swriteLayer,workdir=%swork", rootURL, rootURL, rootURL)
+	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, mntURL)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		logrus.Errorf("func[CreateMountPoint] %v", err)
+	}
+}
+
+func PathExist(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func DeleteWorkSpace(rootURL, mntURL string) {
+	DeleteMountPoint(mntURL)
+	DeleteWritePlayer(rootURL)
+}
+
+func DeleteMountPoint(mntURL string) {
+	cmd := exec.Command("umount", mntURL)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		logrus.Errorf("umount %v error: %v", mntURL, err)
+	}
+
+	if err := os.RemoveAll(mntURL); err != nil {
+		logrus.Errorf("remove dir %v error: %v", mntURL, err)
+	}
+}
+
+func DeleteWritePlayer(rootURL string) {
+	writeURL := rootURL + "writeLayer/"
+	if err := os.RemoveAll(writeURL); err != nil {
+		logrus.Errorf("remove dir %v error: %v", writeURL, err)
+	}
+
+	// work是overlay必须的，具体为什么？？？？
+	workURL := rootURL + "work/"
+	if err := os.RemoveAll(workURL); err != nil {
+		logrus.Errorf("remove dir %v error: %v", workURL, err)
+	}
+}

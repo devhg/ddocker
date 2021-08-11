@@ -34,7 +34,8 @@ root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it bash
 
 create a busybox container
 ![](./imgs/create-busybox-container.png)
+![](./imgs/overlay.jpg)
 
-## Q & A
+## 遇到的问题总结
 
 [Q&A](./problems.md)

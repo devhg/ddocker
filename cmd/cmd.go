@@ -94,6 +94,11 @@ func Run(tty bool, commands []string, res *subsystems.ResourceConfig) {
 	sendInitCommand(commands, writePipe)
 
 	parentProcess.Wait()
+
+	mntURL := "/root/mnt/"
+	rootURL := "/root/"
+	container.DeleteWorkSpace(rootURL, mntURL)
+	os.Exit(-1)
 }
 
 var InitCommand = cli.Command{
