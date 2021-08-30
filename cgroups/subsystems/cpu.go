@@ -8,35 +8,36 @@ import (
 	"strconv"
 )
 
-type CpuSubsystem struct {
+// CPUSubsystem .
+type CPUSubsystem struct {
 }
 
-// 返回subsystem的名字，比如cpu memory
-func (c *CpuSubsystem) Name() string {
+// Name 返回subsystem的名字，比如cpu memory
+func (c *CPUSubsystem) Name() string {
 	return "cpu"
 }
 
-// 设置某个cgroup在这个Subsystem中的资源限制
-func (c *CpuSubsystem) Set(cgroupPath string, res *ResourceConfig) error {
+// Set 设置某个cgroup在这个Subsystem中的资源限制
+func (c *CPUSubsystem) Set(cgroupPath string, res *ResourceConfig) error {
 	subSysCgroupPath, err := GetCgroupPath(c.Name(), cgroupPath, true)
 	if err != nil {
 		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
 	}
 
-	if res.CpuShare == "" {
+	if res.CPUShare == "" {
 		return nil
 	}
 
 	// 设置这个cgroup的内存限制，即将限制写到cgroup对应目录的cpu.shares文件中
 	dstFile := path.Join(subSysCgroupPath, cpuShare)
-	if err := ioutil.WriteFile(dstFile, []byte(res.CpuShare), 0644); err != nil {
+	if err := ioutil.WriteFile(dstFile, []byte(res.CPUShare), 0644); err != nil {
 		return fmt.Errorf("set cgroup memory failed %v", err)
 	}
 	return nil
 }
 
-// 将进程添加到某个cgroup中
-func (c *CpuSubsystem) Apply(cgroupPath string, pid int) error {
+// Apply 将进程添加到某个cgroup中
+func (c *CPUSubsystem) Apply(cgroupPath string, pid int) error {
 	subSysCgroupPath, err := GetCgroupPath(c.Name(), cgroupPath, false)
 	if err != nil {
 		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
@@ -51,8 +52,8 @@ func (c *CpuSubsystem) Apply(cgroupPath string, pid int) error {
 	return nil
 }
 
-// 移除某个cgroup
-func (c *CpuSubsystem) Remove(cgroupPath string) error {
+// Remove 移除某个cgroup
+func (c *CPUSubsystem) Remove(cgroupPath string) error {
 	subSysCgroupPath, err := GetCgroupPath(c.Name(), cgroupPath, false)
 	if err == nil {
 		return os.RemoveAll(subSysCgroupPath)

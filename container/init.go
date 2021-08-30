@@ -16,7 +16,7 @@ import (
 //
 // 3. 下面指定了一些clone参数去fork新进程，并使用namespace隔离新创建的进程和外部环境。
 // 4. 如果用指定了-it参数，就需要把进程的输入输出导入到标准的输入输出
-func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		logrus.Errorf("New pipe error: %v", err)
@@ -38,10 +38,11 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	mntURL := "/root/mnt/"
 	rootURL := "/root/"
 	cmd.Dir = mntURL
-	NewWorkSpace(rootURL, mntURL)
+	NewWorkSpace(rootURL, mntURL, volume)
 	return cmd, writePipe
 }
 
+// NewPipe .
 func NewPipe() (*os.File, *os.File, error) {
 	read, write, err := os.Pipe()
 	if err != nil {

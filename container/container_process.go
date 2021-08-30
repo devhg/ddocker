@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -75,8 +76,8 @@ func setUpMount() {
 	}
 
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
-	syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	_ = syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+	_ = syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
 }
 
 // pivotRoot 改变当前的root文件系统，对应pivot_root系统调用
@@ -117,16 +118,26 @@ func pivotRoot(root string) error {
 	return os.Remove(pivotDir)
 }
 
-func NewWorkSpace(rootURL, mntURL string) {
-	CreateReadOnlyLayer(rootURL)
-	CreateWriteLayer(rootURL)
-	CreateMountPoint(rootURL, mntURL)
+// NewWorkSpace creates a workspace
+func NewWorkSpace(rootURL, mntURL, volume string) {
+	createReadOnlyLayer(rootURL)
+	createWriteLayer(rootURL)
+	createMountPoint(rootURL, mntURL)
+
+	if volume != "" {
+		volumeURLs := strings.Split(volume, ":")
+		if len(volumeURLs) == 2 && volumeURLs[0] != "" && volumeURLs[1] != "" {
+			mountVolume(rootURL, mntURL, volumeURLs)
+			return
+		}
+		logrus.Errorf("bad volume: %v", volume)
+	}
 }
 
-func CreateReadOnlyLayer(rootURL string) {
+func createReadOnlyLayer(rootURL string) {
 	busyboxURL := rootURL + "busybox/"
 	busyboxTar := rootURL + "busybox.tar"
-	exist, err := PathExist(busyboxTar)
+	exist, err := pathExist(busyboxTar)
 	if err != nil {
 		logrus.Infof("failed to judge whether %v exists. %v", busyboxTar, err)
 	}
@@ -142,7 +153,7 @@ func CreateReadOnlyLayer(rootURL string) {
 	}
 }
 
-func CreateWriteLayer(rootURL string) {
+func createWriteLayer(rootURL string) {
 	writeURL := rootURL + "writeLayer/"
 	if err := os.Mkdir(writeURL, 0777); err != nil {
 		logrus.Errorf("mkdir %v error: %v", writeURL, err)
@@ -155,7 +166,7 @@ func CreateWriteLayer(rootURL string) {
 	}
 }
 
-func CreateMountPoint(rootURL, mntURL string) {
+func createMountPoint(rootURL, mntURL string) {
 	if err := os.Mkdir(mntURL, 0777); err != nil {
 		logrus.Errorf("mkdir %v error: %v", mntURL, err)
 	}
@@ -176,7 +187,7 @@ func CreateMountPoint(rootURL, mntURL string) {
 	}
 }
 
-func PathExist(path string) (bool, error) {
+func pathExist(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -188,12 +199,46 @@ func PathExist(path string) (bool, error) {
 	return false, err
 }
 
-func DeleteWorkSpace(rootURL, mntURL string) {
-	DeleteMountPoint(mntURL)
-	DeleteWritePlayer(rootURL)
+// mountVolume 对用户要挂载进来的路径进行挂载
+func mountVolume(rootURL, mntURL string, volumeURLs []string) {
+	// 创建宿主机文件目录
+	parentURL := volumeURLs[0]
+	if err := os.Mkdir(parentURL, 0777); err != nil {
+		logrus.Errorf("mkdir parent dir %v error: %v", parentURL, err)
+	}
+
+	// 在容器目录创建挂载点目录
+	containerURL := path.Join(mntURL, volumeURLs[1])
+	if err := os.Mkdir(containerURL, 0777); err != nil {
+		logrus.Errorf("mkdir container dir %v error: %v", containerURL, err)
+	}
+
+	// 把宿主机文件目录挂在到容器内挂载点
+	dirs := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%swork", containerURL, parentURL, rootURL)
+	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, containerURL)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		logrus.Errorf("func[mountVolume] %v", err)
+	}
 }
 
-func DeleteMountPoint(mntURL string) {
+// DeleteWorkSpace .
+func DeleteWorkSpace(rootURL, mntURL, volume string) {
+	if volume != "" {
+		volumeURLs := strings.Split(volume, ":")
+		if len(volumeURLs) == 2 && volumeURLs[0] != "" && volumeURLs[1] != "" {
+			deleteMountPointWithVolume(mntURL, volumeURLs)
+			deleteWritePlayer(rootURL)
+			return
+		}
+	}
+
+	deleteMountPoint(mntURL)
+	deleteWritePlayer(rootURL)
+}
+
+func deleteMountPoint(mntURL string) {
 	cmd := exec.Command("umount", mntURL)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -207,7 +252,21 @@ func DeleteMountPoint(mntURL string) {
 	}
 }
 
-func DeleteWritePlayer(rootURL string) {
+func deleteMountPointWithVolume(mntURL string, volumeURLs []string) {
+	// 卸载容器里面volome挂载点的文件系统
+	containerURL := path.Join(mntURL, volumeURLs[1])
+	cmd := exec.Command("umount", containerURL)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		logrus.Errorf("umount volume %v:%v error: %v", volumeURLs[0], containerURL, err)
+	}
+
+	// 卸载整个容器文件系统的挂载点
+	deleteMountPoint(mntURL)
+}
+
+func deleteWritePlayer(rootURL string) {
 	writeURL := rootURL + "writeLayer/"
 	if err := os.RemoveAll(writeURL); err != nil {
 		logrus.Errorf("remove dir %v error: %v", writeURL, err)

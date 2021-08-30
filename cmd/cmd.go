@@ -16,6 +16,7 @@ import (
 
 // 需要单测
 
+// RunCommand .
 var RunCommand = cli.Command{
 	Name: "run",
 	Usage: `Create a container with namespace and cgroups limit
@@ -38,6 +39,10 @@ var RunCommand = cli.Command{
 			Name:  "cpuset",
 			Usage: "cpuset limit",
 		},
+		cli.StringFlag{
+			Name:  "v",
+			Usage: "volume",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -58,11 +63,11 @@ var RunCommand = cli.Command{
 		tty := ctx.Bool("it")
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: ctx.String("mm"),
-			CpuSet:      ctx.String("cpuset"),
-			CpuShare:    ctx.String("cpushare"),
+			CPUSet:      ctx.String("cpuset"),
+			CPUShare:    ctx.String("cpushare"),
 		}
-		fmt.Println(tty, resConf.CpuSet, resConf.CpuShare, resConf.MemoryLimit)
-		Run(tty, commands, resConf)
+		fmt.Println(tty, resConf.CPUSet, resConf.CPUShare, resConf.MemoryLimit)
+		Run(tty, commands, resConf, ctx.String("v")) // volume 临时放在这里
 		return nil
 	},
 }
@@ -70,8 +75,8 @@ var RunCommand = cli.Command{
 // Run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func Run(tty bool, commands []string, res *subsystems.ResourceConfig) {
-	parentProcess, writePipe := container.NewParentProcess(tty)
+func Run(tty bool, commands []string, res *subsystems.ResourceConfig, volume string) {
+	parentProcess, writePipe := container.NewParentProcess(tty, volume)
 	if err := parentProcess.Start(); err != nil {
 		logrus.Error(err)
 	}
@@ -86,21 +91,22 @@ func Run(tty bool, commands []string, res *subsystems.ResourceConfig) {
 		panic(err)
 	}
 	// 将容器进程加入到各个subsystem挂载对应的cgroup中
-	cgroupManager.Apply(parentProcess.Process.Pid)
+	_ = cgroupManager.Apply(parentProcess.Process.Pid)
 	if err != nil {
 		panic(err)
 	}
 	// 初始化容器
 	sendInitCommand(commands, writePipe)
 
-	parentProcess.Wait()
+	_ = parentProcess.Wait()
 
 	mntURL := "/root/mnt/"
 	rootURL := "/root/"
-	container.DeleteWorkSpace(rootURL, mntURL)
-	os.Exit(-1)
+	container.DeleteWorkSpace(rootURL, mntURL, volume)
+	// os.Exit(-1)
 }
 
+// InitCommand .
 var InitCommand = cli.Command{
 	Name:  "init",
 	Usage: "Init container process run user's process in container. Do not call it outside.",
@@ -119,6 +125,6 @@ var InitCommand = cli.Command{
 func sendInitCommand(commands []string, writePipe *os.File) {
 	command := strings.Join(commands, " ")
 	logrus.Infof("command all is %s", command)
-	writePipe.WriteString(command)
+	_, _ = writePipe.WriteString(command)
 	writePipe.Close()
 }

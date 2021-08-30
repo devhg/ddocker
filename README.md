@@ -16,6 +16,10 @@
 
 ![ddocker](imgs/ddocker-pipe.png)
 
+## support overlay
+
+![ddocker](imgs/overlay-call.png)
+
 ## run command
 
 ```bash
@@ -28,6 +32,9 @@ root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it -mm 100
 root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it ls -l
 
 root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it bash
+
+root@debian:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it -v /root/volume:/container sh
+sh
 ```
 
 ## Preview
@@ -35,6 +42,9 @@ root@ubuntu1404:~/GoWork/src/github.com/devhg/ddocker# ./ddocker run -it bash
 create a busybox container
 ![](./imgs/create-busybox-container.png)
 ![](./imgs/overlay.jpg)
+
+overlay data volumes
+https://www.yuque.com/docs/share/355c28d6-ac77-4764-82b7-5d75ea71600a?# 《5. 支持宿主机和容器volume宗卷映射》
 
 ## 遇到的问题总结
 

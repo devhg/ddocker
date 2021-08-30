@@ -1,13 +1,13 @@
 package subsystems
 
-// 用于传递资源配置的结构体，包含内存限制，cpu时间片权重，cpu核心数
+// ResourceConfig 用于传递资源配置的结构体，包含内存限制，cpu时间片权重，cpu核心数
 type ResourceConfig struct {
 	MemoryLimit string
-	CpuShare    string
-	CpuSet      string
+	CPUShare    string
+	CPUSet      string
 }
 
-// SubSystemer接口，每个Subsystem可以实现下面4个接口
+// SubSystemer 接口，每个Subsystem可以实现下面4个接口
 // 这里将cgroup抽象成path，原因是cgroup在hierarchy的路径，便是虚拟
 // 文件系统中的虚拟路径
 type SubSystemer interface {
@@ -24,8 +24,9 @@ type SubSystemer interface {
 	Remove(path string) error
 }
 
+// SubsystemIns subsystem instances
 var SubsystemIns = []SubSystemer{
-	&CpuSubsystem{},
+	&CPUSubsystem{},
 	// &CpusetSubSystem{}, // ??
 	// Q: {"level":"info","msg":"set cgroup proc failed write /sys/fs/cgroup/cpuset/ddocker-cgroup/tasks: no space left on device","time":"2021-07-25T16:33:09+08:00"}
 	// A: ?
