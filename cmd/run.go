@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -13,8 +11,6 @@ import (
 	"github.com/devhg/ddocker/cgroups/subsystems"
 	"github.com/devhg/ddocker/container"
 )
-
-// 需要单测
 
 // RunCommand .
 var RunCommand = cli.Command{
@@ -26,6 +22,11 @@ var RunCommand = cli.Command{
 		cli.BoolFlag{
 			Name:  "it",
 			Usage: "enable tty",
+		},
+		// deatch分离式容器，containerd容器统一管理
+		cli.BoolFlag{
+			Name:  "d",
+			Usage: "detach container",
 		},
 		cli.StringFlag{
 			Name:  "mm",
@@ -61,22 +62,32 @@ var RunCommand = cli.Command{
 		}
 
 		tty := ctx.Bool("it")
+		detach := ctx.Bool("d")
+		if tty && detach {
+			return errors.New("-it and -d parameter can not both provider")
+		}
+
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: ctx.String("mm"),
 			CPUSet:      ctx.String("cpuset"),
 			CPUShare:    ctx.String("cpushare"),
 		}
-		fmt.Println(tty, resConf.CPUSet, resConf.CPUShare, resConf.MemoryLimit)
-		Run(tty, commands, resConf, ctx.String("v")) // volume 临时放在这里
+
+		logrus.Infof("create tty %v", tty)
+		run(tty, commands, resConf, ctx.String("v")) // volume 临时放在这里
 		return nil
 	},
 }
 
-// Run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
+// run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func Run(tty bool, commands []string, res *subsystems.ResourceConfig, volume string) {
+func run(tty bool, commands []string, res *subsystems.ResourceConfig, volume string) {
 	parentProcess, writePipe := container.NewParentProcess(tty, volume)
+	if parentProcess == nil {
+		logrus.Errorf("new parent process error")
+		return
+	}
 	if err := parentProcess.Start(); err != nil {
 		logrus.Error(err)
 	}
@@ -90,41 +101,20 @@ func Run(tty bool, commands []string, res *subsystems.ResourceConfig, volume str
 	if err != nil {
 		panic(err)
 	}
+
 	// 将容器进程加入到各个subsystem挂载对应的cgroup中
 	_ = cgroupManager.Apply(parentProcess.Process.Pid)
 	if err != nil {
 		panic(err)
 	}
+
 	// 初始化容器
 	sendInitCommand(commands, writePipe)
+	if tty {
+		_ = parentProcess.Wait()
+	}
 
-	_ = parentProcess.Wait()
-
-	mntURL := "/root/mnt/"
-	rootURL := "/root/"
-	container.DeleteWorkSpace(rootURL, mntURL, volume)
-	// os.Exit(-1)
-}
-
-// InitCommand .
-var InitCommand = cli.Command{
-	Name:  "init",
-	Usage: "Init container process run user's process in container. Do not call it outside.",
-	Flags: nil,
-	/*
-		1. 获取参数
-		2. 执行容器的初始化操作
-	*/
-	Action: func(ctx *cli.Context) error {
-		logrus.Infof("init come on")
-		err := container.RunContainerInitProcess()
-		return err
-	},
-}
-
-func sendInitCommand(commands []string, writePipe *os.File) {
-	command := strings.Join(commands, " ")
-	logrus.Infof("command all is %s", command)
-	_, _ = writePipe.WriteString(command)
-	writePipe.Close()
+	// mntURL := "/root/mnt/"
+	// rootURL := "/root/"
+	// container.DeleteWorkSpace(rootURL, mntURL, volume)
 }

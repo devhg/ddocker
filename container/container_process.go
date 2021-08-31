@@ -135,8 +135,12 @@ func NewWorkSpace(rootURL, mntURL, volume string) {
 }
 
 func createReadOnlyLayer(rootURL string) {
-	busyboxURL := rootURL + "busybox/"
-	busyboxTar := rootURL + "busybox.tar"
+	busyboxURL := path.Join(rootURL, "busybox")
+	busyboxTar := path.Join(rootURL, "busybox.tar")
+	if exist, _ := pathExist(busyboxURL); exist {
+		return
+	}
+
 	exist, err := pathExist(busyboxTar)
 	if err != nil {
 		logrus.Infof("failed to judge whether %v exists. %v", busyboxTar, err)
