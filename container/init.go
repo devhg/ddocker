@@ -1,11 +1,37 @@
 package container
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
+	"path"
+	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/devhg/ddocker/util"
+)
+
+// ContainerInfo .
+type ContainerInfo struct {
+	PID         string `json:"pid"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Command     string `json:"command"`
+	CreatedTime string `json:"create_time"`
+	Status      string `json:"status"`
+}
+
+const (
+	Running             string = "running"
+	Stop                string = "stop"
+	Exit                string = "exit"
+	DefaultInfoLocation string = "/var/run/ddocker/"
+	ConfigName          string = "config.json"
 )
 
 // NewParentProcess 这里是父进程（当前进程执行的内容）
@@ -49,4 +75,59 @@ func NewPipe() (*os.File, *os.File, error) {
 		return nil, nil, err
 	}
 	return read, write, nil
+}
+
+// RecordContainerInfo
+func RecordContainerInfo(cpid int, commandArr []string, name string) (string, error) {
+	// 首先生成长度为10的容器id
+	id := util.RandStringBytes(10)
+	createTime := time.Now().Format("2006-01-02 15:04:05")
+	command := strings.Join(commandArr, " ")
+
+	if name == "" {
+		name = id
+	}
+
+	info := &ContainerInfo{
+		ID:          id,
+		PID:         strconv.Itoa(cpid),
+		Name:        name,
+		Command:     command,
+		CreatedTime: createTime,
+		Status:      Running,
+	}
+
+	b, err := json.Marshal(info)
+	if err != nil {
+		return "", fmt.Errorf("marshal container info error[%v]", err)
+	}
+
+	// /var/run/ddocker/${containerID}/
+	folder := path.Join(DefaultInfoLocation, id)
+	if err := os.MkdirAll(folder, 0622); err != nil {
+		return "", err
+	}
+
+	// /var/run/ddocker/${containerID}/config.json
+	dstFile := path.Join(folder, ConfigName)
+	f, err := os.Create(dstFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(string(b)); err != nil {
+		return "", fmt.Errorf("write container info error[%v]", err)
+	}
+
+	return id, nil
+}
+
+// DeleteContainerInfo
+func DeleteContainerInfo(containerID string) {
+	// /var/run/ddocker/${containerID}/
+	folder := path.Join(DefaultInfoLocation, containerID)
+	if err := os.RemoveAll(folder); err != nil {
+		logrus.Errorf("func[DeleteContainerInfo] error: %v", err)
+	}
 }

@@ -44,6 +44,10 @@ var RunCommand = cli.Command{
 			Name:  "v",
 			Usage: "volume",
 		},
+		cli.StringFlag{
+			Name:  "name",
+			Usage: "container name",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -73,8 +77,10 @@ var RunCommand = cli.Command{
 			CPUShare:    ctx.String("cpushare"),
 		}
 
-		logrus.Infof("create tty %v", tty)
-		run(tty, commands, resConf, ctx.String("v")) // volume 临时放在这里
+		containerName := ctx.String("name")
+		volumes := ctx.String("v")
+		logrus.Infof("create tty[%v] name[%v]", tty, containerName)
+		run(tty, commands, resConf, containerName, volumes) // volume 临时放在这里
 		return nil
 	},
 }
@@ -82,7 +88,7 @@ var RunCommand = cli.Command{
 // run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func run(tty bool, commands []string, res *subsystems.ResourceConfig, volume string) {
+func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume string) {
 	parentProcess, writePipe := container.NewParentProcess(tty, volume)
 	if parentProcess == nil {
 		logrus.Errorf("new parent process error")
@@ -92,12 +98,19 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, volume str
 		logrus.Error(err)
 	}
 
+	// 记录容器信息
+	containerID, err := container.RecordContainerInfo(parentProcess.Process.Pid, commands, name)
+	if err != nil {
+		logrus.Errorf("func[RecordContainerInfo] for %s error: %v", name, err)
+		return
+	}
+
 	// 创建cgroupManager，并调用 Set 设置资源限制 和 Apply 在限制上生效
 	cgroupManager := cgroups.NewCgroupManager("ddocker-cgroup")
 	defer cgroupManager.Destroy()
 
 	// 设置资源限制
-	err := cgroupManager.Set(res)
+	err = cgroupManager.Set(res)
 	if err != nil {
 		panic(err)
 	}
@@ -112,9 +125,10 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, volume str
 	sendInitCommand(commands, writePipe)
 	if tty {
 		_ = parentProcess.Wait()
+		container.DeleteContainerInfo(containerID)
 	}
 
-	// mntURL := "/root/mnt/"
-	// rootURL := "/root/"
-	// container.DeleteWorkSpace(rootURL, mntURL, volume)
+	mntURL := "/root/mnt/"
+	rootURL := "/root/"
+	container.DeleteWorkSpace(rootURL, mntURL, volume)
 }
