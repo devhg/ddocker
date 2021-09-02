@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-
-	"github.com/devhg/ddocker/util"
 )
 
 // ContainerInfo .
@@ -32,6 +30,7 @@ const (
 	Exit                string = "exit"
 	DefaultInfoLocation string = "/var/run/ddocker/"
 	ConfigName          string = "config.json"
+	StdLogFileName      string = "std.log"
 )
 
 // NewParentProcess 这里是父进程（当前进程执行的内容）
@@ -42,11 +41,12 @@ const (
 //
 // 3. 下面指定了一些clone参数去fork新进程，并使用namespace隔离新创建的进程和外部环境。
 // 4. 如果用指定了-it参数，就需要把进程的输入输出导入到标准的输入输出
-func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, id, volume string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		logrus.Errorf("New pipe error: %v", err)
 	}
+
 	cmd := exec.Command("/proc/self/exe", "init")
 	logrus.Info(cmd.Args)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -54,11 +54,20 @@ func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 			syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
 		Unshareflags: syscall.CLONE_NEWNS,
 	}
+
 	if tty {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+	} else {
+		// /var/run/ddocker/${containerID}
+		stdLogFile := RedirectContainerLog(id)
+		if stdLogFile == nil {
+			return nil, nil
+		}
+		cmd.Stdout = stdLogFile
 	}
+
 	cmd.ExtraFiles = []*os.File{readPipe} // 传入管道读取端的句柄
 
 	mntURL := "/root/mnt/"
@@ -78,9 +87,7 @@ func NewPipe() (*os.File, *os.File, error) {
 }
 
 // RecordContainerInfo
-func RecordContainerInfo(cpid int, commandArr []string, name string) (string, error) {
-	// 首先生成长度为10的容器id
-	id := util.RandStringBytes(10)
+func RecordContainerInfo(cpid int, commandArr []string, id, name string) (string, error) {
 	createTime := time.Now().Format("2006-01-02 15:04:05")
 	command := strings.Join(commandArr, " ")
 
@@ -130,4 +137,24 @@ func DeleteContainerInfo(containerID string) {
 	if err := os.RemoveAll(folder); err != nil {
 		logrus.Errorf("func[DeleteContainerInfo] error: %v", err)
 	}
+}
+
+// RedirectContainerLog
+func RedirectContainerLog(containerID string) *os.File {
+	// /var/run/ddocker/${containerID}
+	dir := path.Join(DefaultInfoLocation, containerID)
+	if err := os.MkdirAll(dir, 0622); err != nil {
+		logrus.Errorf("func[RedirectContainerLog] error[%v]", err)
+		return nil
+	}
+
+	// /var/run/ddocker/${containerID}/std.log
+	stdLogFilePath := path.Join(dir, StdLogFileName)
+	stdLogFile, err := os.Create(stdLogFilePath)
+	if err != nil {
+		logrus.Errorf("func[RedirectContainerLog] error[%v]", err)
+		return nil
+	}
+
+	return stdLogFile
 }

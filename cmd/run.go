@@ -10,6 +10,7 @@ import (
 	"github.com/devhg/ddocker/cgroups"
 	"github.com/devhg/ddocker/cgroups/subsystems"
 	"github.com/devhg/ddocker/container"
+	"github.com/devhg/ddocker/util"
 )
 
 // RunCommand .
@@ -89,7 +90,10 @@ var RunCommand = cli.Command{
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
 func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume string) {
-	parentProcess, writePipe := container.NewParentProcess(tty, volume)
+	// 首先生成长度为10的容器id
+	id := util.RandStringBytes(10)
+
+	parentProcess, writePipe := container.NewParentProcess(tty, id, volume)
 	if parentProcess == nil {
 		logrus.Errorf("new parent process error")
 		return
@@ -99,7 +103,7 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volu
 	}
 
 	// 记录容器信息
-	containerID, err := container.RecordContainerInfo(parentProcess.Process.Pid, commands, name)
+	containerID, err := container.RecordContainerInfo(parentProcess.Process.Pid, commands, id, name)
 	if err != nil {
 		logrus.Errorf("func[RecordContainerInfo] for %s error: %v", name, err)
 		return
