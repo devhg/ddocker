@@ -41,10 +41,9 @@ sh
 
 create a busybox container
 ![](./imgs/create-busybox-container.png)
-![](./imgs/overlay.jpg)
 
-overlay data volumes
-https://www.yuque.com/docs/share/355c28d6-ac77-4764-82b7-5d75ea71600a?# 《5. 支持宿主机和容器volume宗卷映射》
+
+![](./imgs/ps-log-exec.jpg)
 
 ## 遇到的问题总结
 
