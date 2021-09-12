@@ -25,6 +25,7 @@ func main() {
 		cmd.PsCommand,
 		cmd.LogCommand,
 		cmd.ExecCommand,
+		cmd.StopCommand,
 	}
 
 	app.Before = func(ctx *cli.Context) error {

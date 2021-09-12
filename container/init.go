@@ -26,7 +26,7 @@ type ContainerInfo struct {
 
 const (
 	Running             string = "running"
-	Stop                string = "stop"
+	Stop                string = "stopped"
 	Exit                string = "exit"
 	DefaultInfoLocation string = "/var/run/ddocker/"
 	ConfigName          string = "config.json"

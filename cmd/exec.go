@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -12,7 +11,6 @@ import (
 
 	// setns
 	_ "github.com/devhg/ddocker/cmd/enterns"
-	"github.com/devhg/ddocker/container"
 )
 
 const (
@@ -47,7 +45,7 @@ var ExecCommand = cli.Command{
 
 func execConatiner(contianerID string, cmds []string) {
 	// 根据容器id 获取进程 pid
-	cpid := getContainerPID(contianerID)
+	cpid := GetContainerPID(contianerID)
 	if cpid == "" {
 		return
 	}
@@ -66,20 +64,4 @@ func execConatiner(contianerID string, cmds []string) {
 	if err := cmd.Run(); err != nil {
 		logrus.Errorf("exec container[%v] error[%v]", contianerID, err)
 	}
-}
-
-func getContainerPID(contianerID string) string {
-	config := path.Join(container.DefaultInfoLocation, contianerID)
-	fileInfo, err := os.Stat(config)
-	if err != nil || os.IsNotExist(err) {
-		logrus.Errorf("func[getContainerPID] error[%v]", err)
-		return ""
-	}
-
-	info, err := getContainerInfo(fileInfo)
-	if err != nil {
-		logrus.Errorf("func[getContainerPID] get container info error[%v]", err)
-		return ""
-	}
-	return info.PID
 }

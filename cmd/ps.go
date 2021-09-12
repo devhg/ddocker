@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"text/tabwriter"
 
 	"github.com/sirupsen/logrus"
@@ -32,7 +30,7 @@ func ListContainers() {
 
 	var infos []*container.ContainerInfo
 	for _, file := range files {
-		info, err := getContainerInfo(file)
+		info, err := readContainerInfo(file)
 		if err != nil {
 			logrus.Errorf("get container info error[%v]", err)
 			continue
@@ -58,21 +56,4 @@ func ListContainers() {
 	if err := w.Flush(); err != nil {
 		logrus.Errorf("tabwriter flush error[%v]", err)
 	}
-}
-
-func getContainerInfo(f os.FileInfo) (*container.ContainerInfo, error) {
-	containerID := f.Name()
-	configFile := path.Join(container.DefaultInfoLocation, containerID, container.ConfigName)
-
-	bytes, err := ioutil.ReadFile(configFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var info container.ContainerInfo
-	if err = json.Unmarshal(bytes, &info); err != nil {
-		return nil, err
-	}
-
-	return &info, nil
 }
