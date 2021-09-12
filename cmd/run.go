@@ -130,9 +130,9 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volu
 	if tty {
 		_ = parentProcess.Wait()
 		container.DeleteContainerInfo(containerID)
-	}
 
-	mntURL := "/root/mnt/"
-	rootURL := "/root/"
-	container.DeleteWorkSpace(rootURL, mntURL, volume)
+		mntURL := "/root/mnt/"
+		rootURL := "/root/"
+		container.DeleteWorkSpace(rootURL, mntURL, volume)
+	}
 }

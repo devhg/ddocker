@@ -159,20 +159,26 @@ func createReadOnlyLayer(rootURL string) {
 
 func createWriteLayer(rootURL string) {
 	writeURL := rootURL + "writeLayer/"
-	if err := os.Mkdir(writeURL, 0777); err != nil {
-		logrus.Errorf("mkdir %v error: %v", writeURL, err)
+	if exist, _ := pathExist(writeURL); !exist {
+		if err := os.Mkdir(writeURL, 0777); err != nil {
+			logrus.Errorf("mkdir %v error: %v", writeURL, err)
+		}
 	}
 
 	// work是overlay必须的，具体为什么？？？？ 暂时放这里吧
 	workURL := rootURL + "work/"
-	if err := os.Mkdir(workURL, 0777); err != nil {
-		logrus.Errorf("mkdir %v error: %v", workURL, err)
+	if exist, _ := pathExist(workURL); !exist {
+		if err := os.Mkdir(workURL, 0777); err != nil {
+			logrus.Errorf("mkdir %v error: %v", workURL, err)
+		}
 	}
 }
 
 func createMountPoint(rootURL, mntURL string) {
-	if err := os.Mkdir(mntURL, 0777); err != nil {
-		logrus.Errorf("mkdir %v error: %v", mntURL, err)
+	if exist, _ := pathExist(mntURL); !exist {
+		if err := os.Mkdir(mntURL, 0777); err != nil {
+			logrus.Errorf("mkdir %v error: %v", mntURL, err)
+		}
 	}
 
 	// mount: unknown filesystem type 'aufs' aufs已经过时了，改成overlay
