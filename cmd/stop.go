@@ -46,7 +46,7 @@ func stopContainer(containerID string) error {
 	}
 
 	// 修改容器状态
-	cinfo.Status = container.Stop
+	cinfo.Status = container.StatusStopped
 	cinfo.PID = ""
 
 	if err := writeContainerInfo(containerID, cinfo); err != nil {

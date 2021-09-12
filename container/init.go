@@ -25,9 +25,10 @@ type ContainerInfo struct {
 }
 
 const (
-	Running             string = "running"
-	Stop                string = "stopped"
-	Exit                string = "exit"
+	StatusRunning string = "running"
+	StatusStopped string = "stopped"
+	StatusExit    string = "exit"
+
 	DefaultInfoLocation string = "/var/run/ddocker/"
 	ConfigName          string = "config.json"
 	StdLogFileName      string = "std.log"
@@ -101,7 +102,7 @@ func RecordContainerInfo(cpid int, commandArr []string, id, name string) (string
 		Name:        name,
 		Command:     command,
 		CreatedTime: createTime,
-		Status:      Running,
+		Status:      StatusRunning,
 	}
 
 	b, err := json.Marshal(info)

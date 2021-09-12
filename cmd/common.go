@@ -66,3 +66,18 @@ func writeContainerInfo(contianerID string, info *container.ContainerInfo) error
 	}
 	return nil
 }
+
+func removeContainerInfo(contianerID string) {
+	// /var/run/ddocker/${containerID}/
+	dir := path.Join(container.DefaultInfoLocation, contianerID)
+	_, err := os.Stat(dir)
+	if err != nil || os.IsNotExist(err) {
+		logrus.Errorf("func[removeContainerInfo] error[%v]", err)
+		return
+	}
+
+	if err := os.RemoveAll(dir); err != nil {
+		logrus.Errorf("func[removeContainerInfo] error[%v]", err)
+		return
+	}
+}
