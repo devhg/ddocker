@@ -22,13 +22,16 @@ type ContainerInfo struct {
 	Command     string `json:"command"`
 	CreatedTime string `json:"create_time"`
 	Status      string `json:"status"`
+	Volume      string `json:"volume"`
 }
 
 const (
 	StatusRunning string = "running"
 	StatusStopped string = "stopped"
 	StatusExit    string = "exit"
+)
 
+const (
 	DefaultInfoLocation string = "/var/run/ddocker/"
 	ConfigName          string = "config.json"
 	StdLogFileName      string = "std.log"
@@ -42,7 +45,7 @@ const (
 //
 // 3. 下面指定了一些clone参数去fork新进程，并使用namespace隔离新创建的进程和外部环境。
 // 4. 如果用指定了-it参数，就需要把进程的输入输出导入到标准的输入输出
-func NewParentProcess(tty bool, id, volume string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, cid, volume, image string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		logrus.Errorf("New pipe error: %v", err)
@@ -61,8 +64,8 @@ func NewParentProcess(tty bool, id, volume string) (*exec.Cmd, *os.File) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	} else {
-		// /var/run/ddocker/${containerID}
-		stdLogFile := RedirectContainerLog(id)
+		// /var/run/ddocker/${containerID}/std.log
+		stdLogFile := RedirectContainerLog(cid)
 		if stdLogFile == nil {
 			return nil, nil
 		}
@@ -71,10 +74,8 @@ func NewParentProcess(tty bool, id, volume string) (*exec.Cmd, *os.File) {
 
 	cmd.ExtraFiles = []*os.File{readPipe} // 传入管道读取端的句柄
 
-	mntURL := "/root/mnt/"
-	rootURL := "/root/"
-	cmd.Dir = mntURL
-	NewWorkSpace(rootURL, mntURL, volume)
+	NewWorkSpace(cid, volume, image)
+	cmd.Dir = fmt.Sprintf(MntURL, cid)
 	return cmd, writePipe
 }
 
@@ -88,7 +89,7 @@ func NewPipe() (*os.File, *os.File, error) {
 }
 
 // RecordContainerInfo
-func RecordContainerInfo(cpid int, commandArr []string, id, name string) (string, error) {
+func RecordContainerInfo(cpid int, commandArr []string, id, name, volume string) (string, error) {
 	createTime := time.Now().Format("2006-01-02 15:04:05")
 	command := strings.Join(commandArr, " ")
 
@@ -103,6 +104,7 @@ func RecordContainerInfo(cpid int, commandArr []string, id, name string) (string
 		Command:     command,
 		CreatedTime: createTime,
 		Status:      StatusRunning,
+		Volume:      volume,
 	}
 
 	b, err := json.Marshal(info)

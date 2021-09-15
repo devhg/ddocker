@@ -80,8 +80,11 @@ var RunCommand = cli.Command{
 
 		containerName := ctx.String("name")
 		volumes := ctx.String("v")
+		imageName := commands[0]
+		commands = commands[1:]
+
 		logrus.Infof("create tty[%v] name[%v]", tty, containerName)
-		run(tty, commands, resConf, containerName, volumes) // volume 临时放在这里
+		run(tty, commands, resConf, containerName, volumes, imageName) // volume 临时放在这里
 		return nil
 	},
 }
@@ -89,11 +92,11 @@ var RunCommand = cli.Command{
 // run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume string) {
+func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume, image string) {
 	// 首先生成长度为10的容器id
 	id := util.RandStringBytes(10)
 
-	parentProcess, writePipe := container.NewParentProcess(tty, id, volume)
+	parentProcess, writePipe := container.NewParentProcess(tty, id, volume, image)
 	if parentProcess == nil {
 		logrus.Errorf("new parent process error")
 		return
@@ -103,7 +106,7 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volu
 	}
 
 	// 记录容器信息
-	containerID, err := container.RecordContainerInfo(parentProcess.Process.Pid, commands, id, name)
+	containerID, err := container.RecordContainerInfo(parentProcess.Process.Pid, commands, id, name, volume)
 	if err != nil {
 		logrus.Errorf("func[RecordContainerInfo] for %s error: %v", name, err)
 		return
@@ -130,9 +133,6 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volu
 	if tty {
 		_ = parentProcess.Wait()
 		container.DeleteContainerInfo(containerID)
-
-		mntURL := "/root/mnt/"
-		rootURL := "/root/"
-		container.DeleteWorkSpace(rootURL, mntURL, volume)
+		container.DeleteWorkSpace(containerID, volume)
 	}
 }

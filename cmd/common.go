@@ -13,7 +13,7 @@ import (
 
 func GetContainerPID(contianerID string) string {
 	info := GetContainerInfo(contianerID)
-	if info != nil {
+	if info == nil {
 		return ""
 	}
 	return info.PID

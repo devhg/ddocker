@@ -39,6 +39,8 @@ func stopContainer(containerID string) error {
 		return err
 	}
 
+	container.DeleteWorkSpace(containerID, cinfo.Volume)
+
 	// 系统调用kill发送信号给容器进程，通过传递syscall.SIGTERM信号，杀掉容器主进程
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 		logrus.Errorf("stop container[%v] error[%v]", containerID, err)

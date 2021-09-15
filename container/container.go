@@ -5,12 +5,20 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
+)
+
+var (
+	RootURL       = "/root/"
+	MntURL        = "/root/mnt/%s"
+	WriteLayerURL = "/root/writeLayer/%s"
+
+	// overlay use it
+	WorkDirURL = "/root/work"
 )
 
 // RunContainerInitProcess 是在容器内部执行的，也就是说代码执行到这里后，
@@ -116,175 +124,4 @@ func pivotRoot(root string) error {
 	}
 
 	return os.Remove(pivotDir)
-}
-
-// NewWorkSpace creates a workspace
-func NewWorkSpace(rootURL, mntURL, volume string) {
-	createReadOnlyLayer(rootURL)
-	createWriteLayer(rootURL)
-	createMountPoint(rootURL, mntURL)
-
-	if volume != "" {
-		volumeURLs := strings.Split(volume, ":")
-		if len(volumeURLs) == 2 && volumeURLs[0] != "" && volumeURLs[1] != "" {
-			mountVolume(rootURL, mntURL, volumeURLs)
-			return
-		}
-		logrus.Errorf("bad volume: %v", volume)
-	}
-}
-
-func createReadOnlyLayer(rootURL string) {
-	busyboxURL := path.Join(rootURL, "busybox")
-	busyboxTar := path.Join(rootURL, "busybox.tar")
-	if exist, _ := pathExist(busyboxURL); exist {
-		return
-	}
-
-	exist, err := pathExist(busyboxTar)
-	if err != nil {
-		logrus.Infof("failed to judge whether %v exists. %v", busyboxTar, err)
-	}
-
-	if exist {
-		if err := os.Mkdir(busyboxURL, 0777); err != nil {
-			logrus.Errorf("mkdir %v error: %v", busyboxURL, err)
-		}
-
-		if _, err := exec.Command("tar", "-xvf", busyboxTar, "-C", busyboxURL).CombinedOutput(); err != nil {
-			logrus.Errorf("unTar %v error: %v", busyboxTar, err)
-		}
-	}
-}
-
-func createWriteLayer(rootURL string) {
-	writeURL := rootURL + "writeLayer/"
-	if exist, _ := pathExist(writeURL); !exist {
-		if err := os.Mkdir(writeURL, 0777); err != nil {
-			logrus.Errorf("mkdir %v error: %v", writeURL, err)
-		}
-	}
-
-	// work是overlay必须的，具体为什么？？？？ 暂时放这里吧
-	workURL := rootURL + "work/"
-	if exist, _ := pathExist(workURL); !exist {
-		if err := os.Mkdir(workURL, 0777); err != nil {
-			logrus.Errorf("mkdir %v error: %v", workURL, err)
-		}
-	}
-}
-
-func createMountPoint(rootURL, mntURL string) {
-	if exist, _ := pathExist(mntURL); !exist {
-		if err := os.Mkdir(mntURL, 0777); err != nil {
-			logrus.Errorf("mkdir %v error: %v", mntURL, err)
-		}
-	}
-
-	// mount: unknown filesystem type 'aufs' aufs已经过时了，改成overlay
-	// cat /proc/filesystems 查看支持的文件系统类型
-	//
-	// mount -t overlay overlay -o lowerdir=./lower,upperdir=./upper,workdir=./work ./merged
-
-	// 把writeLayer目录和busybox目录 mount 到 mnt 目录
-	// todo mount ？？？？？？
-	dirs := fmt.Sprintf("lowerdir=%sbusybox,upperdir=%swriteLayer,workdir=%swork", rootURL, rootURL, rootURL)
-	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, mntURL)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		logrus.Errorf("func[CreateMountPoint] %v", err)
-	}
-}
-
-func pathExist(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-// mountVolume 对用户要挂载进来的路径进行挂载
-func mountVolume(rootURL, mntURL string, volumeURLs []string) {
-	// 创建宿主机文件目录
-	parentURL := volumeURLs[0]
-	if err := os.Mkdir(parentURL, 0777); err != nil {
-		logrus.Errorf("mkdir parent dir %v error: %v", parentURL, err)
-	}
-
-	// 在容器目录创建挂载点目录
-	containerURL := path.Join(mntURL, volumeURLs[1])
-	if err := os.Mkdir(containerURL, 0777); err != nil {
-		logrus.Errorf("mkdir container dir %v error: %v", containerURL, err)
-	}
-
-	// 把宿主机文件目录挂在到容器内挂载点
-	dirs := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%swork", containerURL, parentURL, rootURL)
-	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, containerURL)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		logrus.Errorf("func[mountVolume] %v", err)
-	}
-}
-
-// DeleteWorkSpace .
-func DeleteWorkSpace(rootURL, mntURL, volume string) {
-	if volume != "" {
-		volumeURLs := strings.Split(volume, ":")
-		if len(volumeURLs) == 2 && volumeURLs[0] != "" && volumeURLs[1] != "" {
-			deleteMountPointWithVolume(mntURL, volumeURLs)
-			deleteWritePlayer(rootURL)
-			return
-		}
-	}
-
-	deleteMountPoint(mntURL)
-	deleteWritePlayer(rootURL)
-}
-
-func deleteMountPoint(mntURL string) {
-	cmd := exec.Command("umount", mntURL)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		logrus.Errorf("umount %v error: %v", mntURL, err)
-	}
-
-	if err := os.RemoveAll(mntURL); err != nil {
-		logrus.Errorf("remove dir %v error: %v", mntURL, err)
-	}
-}
-
-func deleteMountPointWithVolume(mntURL string, volumeURLs []string) {
-	// 卸载容器里面volome挂载点的文件系统
-	containerURL := path.Join(mntURL, volumeURLs[1])
-	cmd := exec.Command("umount", containerURL)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		logrus.Errorf("umount volume %v:%v error: %v", volumeURLs[0], containerURL, err)
-	}
-
-	// 卸载整个容器文件系统的挂载点
-	deleteMountPoint(mntURL)
-}
-
-func deleteWritePlayer(rootURL string) {
-	writeURL := rootURL + "writeLayer/"
-	if err := os.RemoveAll(writeURL); err != nil {
-		logrus.Errorf("remove dir %v error: %v", writeURL, err)
-	}
-
-	// work是overlay必须的，具体为什么？？？？
-	workURL := rootURL + "work/"
-	if err := os.RemoveAll(workURL); err != nil {
-		logrus.Errorf("remove dir %v error: %v", workURL, err)
-	}
 }
