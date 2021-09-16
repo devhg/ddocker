@@ -49,6 +49,10 @@ var RunCommand = cli.Command{
 			Name:  "name",
 			Usage: "container name",
 		},
+		cli.StringSliceFlag{
+			Name:  "e",
+			Usage: "set environment",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -84,7 +88,11 @@ var RunCommand = cli.Command{
 		commands = commands[1:]
 
 		logrus.Infof("create tty[%v] name[%v]", tty, containerName)
-		run(tty, commands, resConf, containerName, volumes, imageName) // volume 临时放在这里
+
+		env := ctx.StringSlice("e")
+		logrus.Infof("create env [%v]", env)
+
+		run(tty, commands, resConf, containerName, volumes, imageName, env) // volume 临时放在这里
 		return nil
 	},
 }
@@ -92,11 +100,11 @@ var RunCommand = cli.Command{
 // run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume, image string) {
+func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume, image string, env []string) {
 	// 首先生成长度为10的容器id
 	id := util.RandStringBytes(10)
 
-	parentProcess, writePipe := container.NewParentProcess(tty, id, volume, image)
+	parentProcess, writePipe := container.NewParentProcess(tty, id, volume, image, env)
 	if parentProcess == nil {
 		logrus.Errorf("new parent process error")
 		return

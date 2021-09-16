@@ -45,7 +45,7 @@ const (
 //
 // 3. 下面指定了一些clone参数去fork新进程，并使用namespace隔离新创建的进程和外部环境。
 // 4. 如果用指定了-it参数，就需要把进程的输入输出导入到标准的输入输出
-func NewParentProcess(tty bool, cid, volume, image string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, cid, volume, image string, envs []string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		logrus.Errorf("New pipe error: %v", err)
@@ -72,7 +72,8 @@ func NewParentProcess(tty bool, cid, volume, image string) (*exec.Cmd, *os.File)
 		cmd.Stdout = stdLogFile
 	}
 
-	cmd.ExtraFiles = []*os.File{readPipe} // 传入管道读取端的句柄
+	cmd.ExtraFiles = []*os.File{readPipe}   // 传入管道读取端的句柄
+	cmd.Env = append(os.Environ(), envs...) // 继承父进程的环境变量
 
 	NewWorkSpace(cid, volume, image)
 	cmd.Dir = fmt.Sprintf(MntURL, cid)

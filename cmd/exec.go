@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -61,7 +62,23 @@ func execConatiner(contianerID string, cmds []string) {
 	os.Setenv(ENV_EXEC_PID, cpid)
 	os.Setenv(ENV_EXEC_CMD, command)
 
+	envs := getEnvByPID(cpid)
+	cmd.Env = append(os.Environ(), envs...)
+
 	if err := cmd.Run(); err != nil {
 		logrus.Errorf("exec container[%v] error[%v]", contianerID, err)
 	}
+}
+
+func getEnvByPID(pid string) []string {
+	// 进程环境变量存放的位置是 /proc/PID/environ
+	path := fmt.Sprintf("/proc/%s/environ", pid)
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		logrus.Errorf("read file %s error %v", path, err)
+		return nil
+	}
+
+	// 多个环境变量的分隔符是 \u0000
+	return strings.Split(string(b), "\u0000")
 }
