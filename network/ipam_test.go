@@ -1,0 +1,70 @@
+package network
+
+import (
+	"net"
+	"os"
+	"testing"
+)
+
+func TestAllocate(t *testing.T) {
+	subnet := `{"192.168.0.0/24":"1100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"case1", subnet},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, ipnet, _ := net.ParseCIDR("192.168.0.1/24")
+			ip, err := ipAllocator.Allocate(ipnet)
+			t.Logf("alloc ip: %v, err: %v", ip, err)
+
+			_, ipnet, _ = net.ParseCIDR("192.168.0.1/24")
+			ip, err = ipAllocator.Allocate(ipnet)
+			t.Logf("alloc ip: %v, err: %v", ip, err)
+
+			b, err := os.ReadFile(ipamDefaultAllocatorPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if string(b) != tt.want {
+				t.Fatal("unexpected result")
+			}
+		})
+	}
+
+	// cat /var/run/ddocker/network/ipam/subnet.json
+	// subnet := `{"192.168.0.0/24":"1100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
+}
+
+func TestReleases(t *testing.T) {
+	subnet := `{"192.168.0.0/24":"0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"case1", subnet},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			ip, ipnet, _ := net.ParseCIDR("192.168.0.1/24")
+			err := ipAllocator.Release(ipnet, ip)
+			t.Logf("release err: %v", err)
+
+			b, err := os.ReadFile(ipamDefaultAllocatorPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if string(b) != tt.want {
+				t.Fatal("unexpected result")
+			}
+		})
+	}
+
+	// cat /var/run/ddocker/network/ipam/subnet.json
+	// subnet := `{"192.168.0.0/24":"0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
+}
