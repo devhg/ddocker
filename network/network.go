@@ -106,7 +106,7 @@ func CreateNetwork(driver, subnet, name string) error {
 		return err
 	}
 
-	cidr.IP = net.IP(gatewayIP)
+	cidr.IP = gatewayIP
 
 	network, err := drivers[driver].Create(cidr.String(), name)
 	if err != nil {
