@@ -50,8 +50,8 @@ var (
 
 // Init 加载网路驱动
 func Init() error {
-	var bridgeDriver = BridgeNetworkDriver{}
-	drivers[bridgeDriver.Name()] = &bridgeDriver
+	var bridgeDriver = &BridgeNetworkDriver{}
+	drivers[bridgeDriver.Name()] = bridgeDriver
 
 	if _, err := os.Stat(defaultNetworkPath); err != nil {
 		if os.IsNotExist(err) {
@@ -84,9 +84,9 @@ func Init() error {
 
 func ListNetwork() {
 	w := tabwriter.NewWriter(os.Stdout, 12, 1, 3, ' ', 0)
-	fmt.Fprintf(w, "Name\tIPRange\tDriver")
+	fmt.Fprintf(w, "Name\tIPRange\tDriver\n")
 	for _, v := range networks {
-		fmt.Fprintf(w, "%s\t%s\t%s\t", v.Name, v.IPRange, v.Driver)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", v.Name, v.IPRange, v.Driver)
 	}
 
 	if err := w.Flush(); err != nil {
@@ -108,7 +108,7 @@ func CreateNetwork(driver, subnet, name string) error {
 
 	cidr.IP = gatewayIP
 
-	network, err := drivers[driver].Create(cidr.String(), name)
+	network, err := drivers[driver].Create(name, cidr.String())
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func DeleteNetwork(networkName string) error {
 		return err
 	}
 
-	if err := drivers[nw.Driver].Delete(*nw); err != nil {
+	if err := drivers["bridge"].Delete(*nw); err != nil {
 		return fmt.Errorf("remove network error: %v", err)
 	}
 

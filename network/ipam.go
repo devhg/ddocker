@@ -133,12 +133,14 @@ func (ia *IPAM) Release(subnet *net.IPNet, ipaddr net.IP) error {
 	}
 
 	releaseIP := ipaddr.To4()
+	subnetIP := subnet.IP.To4()
+
 	offset := 0 // 位图	偏移
 
 	// 对应分配时候的加1
 	releaseIP[3]--
 	for t := 4; t > 0; t-- {
-		offset += int(releaseIP[t-1]-subnet.IP[t-1]) << ((4 - t) * 8)
+		offset += int(releaseIP[t-1]-subnetIP[t-1]) << ((4 - t) * 8)
 	}
 
 	// 将分配位图数组中的索引位置的值置0

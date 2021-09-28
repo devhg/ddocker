@@ -17,6 +17,7 @@ func (b *BridgeNetworkDriver) Name() string {
 	return "bridge"
 }
 
+// Create creates a network with network name and subnet
 func (b *BridgeNetworkDriver) Create(name string, subnet string) (*Network, error) {
 	// 取到网段字符串中的网关ip地址和网络的ip段
 	ip, IPRange, _ := net.ParseCIDR(subnet)
@@ -25,6 +26,7 @@ func (b *BridgeNetworkDriver) Create(name string, subnet string) (*Network, erro
 	n := &Network{
 		Name:    name,
 		IPRange: IPRange,
+		Driver:  b.Name(),
 	}
 
 	err := b.initBridge(n)
@@ -58,35 +60,37 @@ func (b *BridgeNetworkDriver) initBridge(n *Network) error {
 	return nil
 }
 
-func createBridgeInterface(name string) error {
+func createBridgeInterface(bridgeName string) error {
 	// 先检查是否包含同名的Bridge设备
-	_, err := net.InterfaceByName(name)
+	_, err := net.InterfaceByName(bridgeName)
 	if err == nil || !strings.Contains(err.Error(), "no such network interface") {
 		return err
 	}
 
 	// 初始化一个netlink的Link基础对象
 	la := netlink.NewLinkAttrs()
-	la.Name = name
+	la.Name = bridgeName
 
 	// 使用刚才创建的link属性创建netlink的Bridge对象
 	br := &netlink.Bridge{LinkAttrs: la}
 
 	// 创建一个Bridge虚拟设备，相当于ip link add xxxx
 	if err := netlink.LinkAdd(br); err != nil {
-		return fmt.Errorf("bridge %s creation error: %v", name, err)
+		return fmt.Errorf("bridge %s creation error: %v", bridgeName, err)
 	}
 
 	return nil
 }
 
 // 设置网络接口的IP地址， example: setInterfaceIP("test", "192.168.0.1/24")
-func setInterfaceIP(name, rawIP string) error {
-	iface, err := netlink.LinkByName(name)
+func setInterfaceIP(bridgeName, rawIP string) error {
+	iface, err := netlink.LinkByName(bridgeName)
 	if err != nil {
 		return fmt.Errorf("error get interface: %v", err)
 	}
 
+	// netlink.ParseIPNet("192.168.0.1/24")
+	// ipNet.IP will equal 192.168.0.1, not 192.168.0.0
 	ipNet, err := netlink.ParseIPNet(rawIP)
 	if err != nil {
 		return err
@@ -99,26 +103,40 @@ func setInterfaceIP(name, rawIP string) error {
 		Scope: 0,
 	}
 
+	// 给网络接口配置IP地址和路由表，相当于 $(ip addr add xxx)
+	// 同时如果配置了地址所在的网段信息，例如192.168.0.0/24
+	// 还会配置路由表192.168.0.0/24转发到这个网络接口上
 	return netlink.AddrAdd(iface, addr)
 }
 
-func setInterfaceUP(name string) error {
-	iface, err := netlink.LinkByName(name)
+// setInterfaceUP 设置网络接口为UP状态
+func setInterfaceUP(bridgeName string) error {
+	iface, err := netlink.LinkByName(bridgeName)
 	if err != nil {
-		return fmt.Errorf("error retrieving a link named [ %s ]: %v", iface.Attrs().Name, err)
+		return fmt.Errorf("error retrieving a link named [%s]: %v", iface.Attrs().Name, err)
 	}
 
 	if err := netlink.LinkSetUp(iface); err != nil {
-		return fmt.Errorf("error enabling interface for %s: %v", name, err)
+		return fmt.Errorf("error enabling interface for %s: %v", bridgeName, err)
 	}
 	return nil
 }
 
+// setupIPTables 由于go没有直接操作iptables的库，所以直接需要通过命令来实现
+// 通过iptables 创建SNAT规则，只要是从这个网桥上出来的包，都会对其做源IP的转换，
+// 保证了容器经过宿主机访问到宿主机外部网络请求的包转换成机器的IP，从而正确的送达和接收。
 func setupIPTables(bridgeName string, subnet *net.IPNet) error {
+	// iptables -t nat -A POSTROUTING -s <bridgeName> ! -o <bridgeName> -j MASQUERADE
 	iptablesCmd := fmt.Sprintf("-t nat -A POSTROUTING -s %s ! -o %s -j MASQUERADE",
 		subnet.String(), bridgeName)
-	cmd := exec.Command("iptables", strings.Split(iptablesCmd, " ")...)
-	err := cmd.Run()
+
+	cmds := strings.Split(iptablesCmd, " ")
+	cmd := exec.Command("iptables", cmds...)
+
+	// if err := cmd.Run(); err != nil {
+	// 	logrus.Errorf("[%s] run error: %v", cmd.String(), err)
+	// }
+
 	output, err := cmd.Output()
 	if err != nil {
 		logrus.Errorf("iptables Output, %v", output)
@@ -126,7 +144,7 @@ func setupIPTables(bridgeName string, subnet *net.IPNet) error {
 	return err
 }
 
-// 删除网络
+// Delete 删除网络
 func (b *BridgeNetworkDriver) Delete(network Network) error {
 	bridgeName := network.Name
 	br, err := netlink.LinkByName(bridgeName)
@@ -137,7 +155,7 @@ func (b *BridgeNetworkDriver) Delete(network Network) error {
 	return netlink.LinkDel(br)
 }
 
-// 连接容器网络端点到网络
+// Connect 容器网络端点连接到网络
 func (b *BridgeNetworkDriver) Connect(network *Network, endpoint *Endpoint) error {
 	bridgeName := network.Name
 	br, err := netlink.LinkByName(bridgeName)
