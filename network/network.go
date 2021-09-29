@@ -7,12 +7,16 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 
 	"github.com/devhg/ddocker/container"
 )
@@ -140,11 +144,13 @@ func Connect(networkName string, cinfo *container.ContainerInfo) error {
 		return fmt.Errorf("no such network: %s", networkName)
 	}
 
+	// 分配容器的IP地址
 	ip, err := ipAllocator.Allocate(network.IPRange)
 	if err != nil {
 		return err
 	}
 
+	// 创建容器的 网络端点，设置网络端点的IP，端口的映射信息
 	endpoint := &Endpoint{
 		ID:          cinfo.ID + "-" + networkName,
 		IPaddr:      ip,
@@ -163,14 +169,111 @@ func Connect(networkName string, cinfo *container.ContainerInfo) error {
 	}
 
 	// 配置容器到宿主机的端口映射
-	return configPortMapping(endpoint, cinfo)
+	return configPortMapping(endpoint)
 }
 
-func configEndpointIPAddrAndRoute(endpoint *Endpoint, cinfo *container.ContainerInfo) error {
-	return nil
+func configEndpointIPAddrAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) error {
+	// 通过name已经接入Linux Bridge的veth
+	peerLink, err := netlink.LinkByName(ep.Device.PeerName)
+	if err != nil {
+		return fmt.Errorf("fail config endpoint: %v", err)
+	}
+
+	// 将容器的网络端点加入到容器的net namespace中
+	// 并使这个函数下面的操作都在这个网络空间中进行，执行完恢复默认的网络空间
+	defer enterContainerNetns(peerLink, cinfo)()
+
+	interfaceIP := ep.Network.IPRange
+	interfaceIP.IP = ep.IPaddr
+
+	// 1. 设置容器内veth端点的IP
+	if err = setInterfaceIP(ep.Device.PeerName, interfaceIP.String()); err != nil {
+		return fmt.Errorf("%v,%s", ep.Network, err)
+	}
+
+	// 2. 启动容器内的veth端点
+	if err = setInterfaceUP(ep.Device.PeerName); err != nil {
+		return err
+	}
+
+	// 3. 容器 net namespace 中默认本地地址是127.0.0.1的“lo”网卡的状态默认是关闭的
+	// 启动它以保证容器访问自己的请求
+	if err = setInterfaceUP("lo"); err != nil {
+		return err
+	}
+
+	// 4. 设置容器内的所有外部请求都通过容器的veth端点访问
+	// 0.0.0.0/0网段，表示所有的IP地址段
+	_, cidr, _ := net.ParseCIDR("0.0.0.0/0")
+
+	// 构建要添加的路由数据，包括网络设备、网关IP及目的网段
+	defaultRoute := &netlink.Route{
+		LinkIndex: peerLink.Attrs().Index,
+		Gw:        ep.Network.IPRange.IP,
+		Dst:       cidr,
+	}
+
+	// 添加路由到容器的网络空间
+	// $(route add -net 0.0.0.0/0 gw ${Bridge网桥地址} dev ${容器内的veth端点设备})
+	return netlink.RouteAdd(defaultRoute)
 }
 
-func configPortMapping(endpoint *Endpoint, cinfo *container.ContainerInfo) error {
+func enterContainerNetns(enLink netlink.Link, cinfo *container.ContainerInfo) func() {
+	// 找到容器的 net namespace    /proc/[pid]/ns/net
+	cnsnet := fmt.Sprintf("/proc/%s/ns/net", cinfo.PID)
+	f, err := os.OpenFile(cnsnet, os.O_RDONLY, 0)
+	if err != nil {
+		logrus.Errorf("error get container net namespace, %v", err)
+	}
+
+	nsFD := f.Fd()
+
+	// 锁定当前程序的线程，如果不锁定，goroutine可能会调度到别的线程上去，
+	// 就不能保证一直在所需要的网络空间中了。
+	runtime.LockOSThread()
+
+	// 1. 修改veth peer 另外一端移到容器的 net namespace 中
+	if err = netlink.LinkSetNsFd(enLink, int(nsFD)); err != nil {
+		logrus.Errorf("error set link netns to container namespace, %v", err)
+	}
+
+	// 2. 获取当前的网络namespace，以便以后从容器net namespace退出到当前namespace
+	origns, err := netns.Get()
+	if err != nil {
+		logrus.Errorf("error get current netns, %v", err)
+	}
+
+	// 3. 设置当前进程到新的网络namespace，并在函数执行完成之后再恢复到之前的namespace
+	if err = netns.Set(netns.NsHandle(nsFD)); err != nil {
+		logrus.Errorf("error set netns, %v", err)
+	}
+
+	return func() {
+		// 在容器net namespace中，执行此函数恢复到原来的net namespace
+		_ = netns.Set(origns)
+		origns.Close()
+		runtime.UnlockOSThread()
+		f.Close()
+	}
+}
+
+func configPortMapping(ep *Endpoint) error {
+	for _, pm := range ep.PortMapping {
+		portMapping := strings.Split(pm, ":")
+		if len(portMapping) != 2 {
+			logrus.Errorf("port mapping format error, %v", pm)
+			continue
+		}
+		iptablesCmd := fmt.Sprintf("-t nat -A PREROUTING -p tcp -m tcp --dport %s -j DNAT --to-destination %s:%s",
+			portMapping[0], ep.IPaddr.String(), portMapping[1])
+
+		subcmds := strings.Split(iptablesCmd, " ")
+		cmd := exec.Command("iptables", subcmds...)
+		if output, err := cmd.Output(); err != nil {
+			logrus.Errorf("iptables Output, %v", output)
+			continue
+		}
+	}
 	return nil
 }
 

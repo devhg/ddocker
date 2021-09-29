@@ -125,6 +125,12 @@ func setInterfaceUP(bridgeName string) error {
 // setupIPTables 由于go没有直接操作iptables的库，所以直接需要通过命令来实现
 // 通过iptables 创建SNAT规则，只要是从这个网桥上出来的包，都会对其做源IP的转换，
 // 保证了容器经过宿主机访问到宿主机外部网络请求的包转换成机器的IP，从而正确的送达和接收。
+
+// [root@linux ~]# iptables -D INPUT 3  //删除input的第3条规则
+// [root@linux ~]# iptables -t nat -D POSTROUTING 1  //删除nat表中postrouting的第一条规则
+// [root@linux ~]# iptables -F INPUT   //清空 filter表INPUT所有规则
+// [root@linux ~]# iptables -F    //清空所有规则
+// [root@linux ~]# iptables -t nat -F POSTROUTING   //清空nat表POSTROUTING所有规则
 func setupIPTables(bridgeName string, subnet *net.IPNet) error {
 	// iptables -t nat -A POSTROUTING -s <bridgeName> ! -o <bridgeName> -j MASQUERADE
 	iptablesCmd := fmt.Sprintf("-t nat -A POSTROUTING -s %s ! -o %s -j MASQUERADE",
@@ -157,25 +163,32 @@ func (b *BridgeNetworkDriver) Delete(network Network) error {
 
 // Connect 容器网络端点连接到网络
 func (b *BridgeNetworkDriver) Connect(network *Network, endpoint *Endpoint) error {
+	// 通过Linux Bridge接口名获取到接口的对象
 	bridgeName := network.Name
 	br, err := netlink.LinkByName(bridgeName)
 	if err != nil {
 		return err
 	}
 
+	// 创建veth接口配置
 	la := netlink.NewLinkAttrs()
 	la.Name = endpoint.ID[:5]
+	// 通过veth接口的master属性，设置这个veth的一端挂载到Linux Bridge网络上
 	la.MasterIndex = br.Attrs().Index
 
+	// 创建veth对象，通过PeerName配置veth另一端的接口名
 	endpoint.Device = netlink.Veth{
 		LinkAttrs: la,
 		PeerName:  "cif-" + endpoint.ID[:5],
 	}
 
+	// LinkAdd方法创建出这个veth'接口，因为上面制定了link的MasterIndex是对应的Linux bridge网络
+	// 所以veth的另一端已经挂载了网路对应的Linux Bridge上
 	if err = netlink.LinkAdd(&endpoint.Device); err != nil {
 		return fmt.Errorf("error Add Endpoint Device: %v", err)
 	}
 
+	// 设置veth启动 $(ip link set xxx up)
 	if err = netlink.LinkSetUp(&endpoint.Device); err != nil {
 		return fmt.Errorf("error Add Endpoint Device: %v", err)
 	}
