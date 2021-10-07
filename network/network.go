@@ -47,7 +47,7 @@ type Endpoint struct {
 }
 
 var (
-	defaultNetworkPath = "/var/run/mydocker/network/network/"
+	defaultNetworkPath = "/var/run/ddocker/network/network/"
 	drivers            = map[string]NetworkDriver{}
 	networks           = map[string]*Network{}
 )
@@ -139,6 +139,7 @@ func DeleteNetwork(networkName string) error {
 }
 
 func Connect(networkName string, cinfo *container.ContainerInfo) error {
+	// 通过networkName获取对应已经创建的network
 	network, ok := networks[networkName]
 	if !ok {
 		return fmt.Errorf("no such network: %s", networkName)
@@ -163,7 +164,7 @@ func Connect(networkName string, cinfo *container.ContainerInfo) error {
 		return err
 	}
 
-	// 进入容器的网络namespace，配置容器网络设备的 IP 地址和路由
+	// 进入容器的网络namespace，配置容器网络、设备的IP地址和路由
 	if err := configEndpointIPAddrAndRoute(endpoint, cinfo); err != nil {
 		return err
 	}
@@ -172,16 +173,17 @@ func Connect(networkName string, cinfo *container.ContainerInfo) error {
 	return configPortMapping(endpoint)
 }
 
+// 进入容器的网络namespace，配置容器网络设备的 IP 地址和路由
 func configEndpointIPAddrAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) error {
-	// 通过name已经接入Linux Bridge的veth
+	// 通过name获取已经接入Linux Bridge的veth
 	peerLink, err := netlink.LinkByName(ep.Device.PeerName)
 	if err != nil {
 		return fmt.Errorf("fail config endpoint: %v", err)
 	}
 
-	// 将容器的网络端点加入到容器的net namespace中
+	// 将上面获取到的网络端点veth，加入到容器的net namespace中
 	// 并使这个函数下面的操作都在这个网络空间中进行，执行完恢复默认的网络空间
-	defer enterContainerNetns(peerLink, cinfo)()
+	defer enterContainerNetns(&peerLink, cinfo)()
 
 	interfaceIP := ep.Network.IPRange
 	interfaceIP.IP = ep.IPaddr
@@ -218,7 +220,7 @@ func configEndpointIPAddrAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) 
 	return netlink.RouteAdd(defaultRoute)
 }
 
-func enterContainerNetns(enLink netlink.Link, cinfo *container.ContainerInfo) func() {
+func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) func() {
 	// 找到容器的 net namespace    /proc/[pid]/ns/net
 	cnsnet := fmt.Sprintf("/proc/%s/ns/net", cinfo.PID)
 	f, err := os.OpenFile(cnsnet, os.O_RDONLY, 0)
@@ -233,7 +235,7 @@ func enterContainerNetns(enLink netlink.Link, cinfo *container.ContainerInfo) fu
 	runtime.LockOSThread()
 
 	// 1. 修改veth peer 另外一端移到容器的 net namespace 中
-	if err = netlink.LinkSetNsFd(enLink, int(nsFD)); err != nil {
+	if err = netlink.LinkSetNsFd(*enLink, int(nsFD)); err != nil {
 		logrus.Errorf("error set link netns to container namespace, %v", err)
 	}
 
@@ -264,6 +266,9 @@ func configPortMapping(ep *Endpoint) error {
 			logrus.Errorf("port mapping format error, %v", pm)
 			continue
 		}
+
+		// 由于iptables没有go语言的实现，采用exec.Command的方式直接调用命令配置
+		// 在iptables的PREROUTING中添加DNAT规则，将宿主机端口转发到容器的地址端口上
 		iptablesCmd := fmt.Sprintf("-t nat -A PREROUTING -p tcp -m tcp --dport %s -j DNAT --to-destination %s:%s",
 			portMapping[0], ep.IPaddr.String(), portMapping[1])
 

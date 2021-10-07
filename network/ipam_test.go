@@ -16,11 +16,11 @@ func TestAllocate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, ipnet, _ := net.ParseCIDR("192.168.0.1/24")
+			_, ipnet, _ := net.ParseCIDR("192.168.10.1/24")
 			ip, err := ipAllocator.Allocate(ipnet)
 			t.Logf("alloc ip: %v, err: %v", ip, err)
 
-			_, ipnet, _ = net.ParseCIDR("192.168.0.1/24")
+			_, ipnet, _ = net.ParseCIDR("192.168.10.1/24")
 			ip, err = ipAllocator.Allocate(ipnet)
 			t.Logf("alloc ip: %v, err: %v", ip, err)
 

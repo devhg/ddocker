@@ -41,7 +41,11 @@ func (b *BridgeNetworkDriver) initBridge(n *Network) error {
 	}
 
 	// 2. 设置Bridge设备的地址和路由
-	gatewayIP := n.IPRange
+	fmt.Println(n.IPRange.String())
+	gatewayIP := *n.IPRange
+	gatewayIP.IP = n.IPRange.IP
+	fmt.Println(gatewayIP.String())
+
 	if err := setInterfaceIP(bridgeName, gatewayIP.String()); err != nil {
 		return fmt.Errorf("error assigning address: %s on bridge: %s with an error: %v",
 			gatewayIP, bridgeName, err)
@@ -57,6 +61,23 @@ func (b *BridgeNetworkDriver) initBridge(n *Network) error {
 		return fmt.Errorf("setting iptables for %s error: %v", bridgeName, err)
 	}
 
+	return nil
+}
+
+// deleteBridge deletes the bridge
+func (b *BridgeNetworkDriver) deleteBridge(n *Network) error {
+	bridgeName := n.Name
+
+	// get the link
+	l, err := netlink.LinkByName(bridgeName)
+	if err != nil {
+		return fmt.Errorf("get link with name %s failed: %v", bridgeName, err)
+	}
+
+	// delete the link
+	if err := netlink.LinkDel(l); err != nil {
+		return fmt.Errorf("failed to remove bridge interface %s delete: %v", bridgeName, err)
+	}
 	return nil
 }
 
@@ -99,8 +120,6 @@ func setInterfaceIP(bridgeName, rawIP string) error {
 	addr := &netlink.Addr{
 		IPNet: ipNet,
 		Label: "",
-		Flags: 0,
-		Scope: 0,
 	}
 
 	// 给网络接口配置IP地址和路由表，相当于 $(ip addr add xxx)
@@ -125,7 +144,7 @@ func setInterfaceUP(bridgeName string) error {
 // setupIPTables 由于go没有直接操作iptables的库，所以直接需要通过命令来实现
 // 通过iptables 创建SNAT规则，只要是从这个网桥上出来的包，都会对其做源IP的转换，
 // 保证了容器经过宿主机访问到宿主机外部网络请求的包转换成机器的IP，从而正确的送达和接收。
-
+//
 // [root@linux ~]# iptables -D INPUT 3  //删除input的第3条规则
 // [root@linux ~]# iptables -t nat -D POSTROUTING 1  //删除nat表中postrouting的第一条规则
 // [root@linux ~]# iptables -F INPUT   //清空 filter表INPUT所有规则
@@ -133,6 +152,7 @@ func setInterfaceUP(bridgeName string) error {
 // [root@linux ~]# iptables -t nat -F POSTROUTING   //清空nat表POSTROUTING所有规则
 func setupIPTables(bridgeName string, subnet *net.IPNet) error {
 	// iptables -t nat -A POSTROUTING -s <bridgeName> ! -o <bridgeName> -j MASQUERADE
+	fmt.Println("setupIPTables", subnet.String())
 	iptablesCmd := fmt.Sprintf("-t nat -A POSTROUTING -s %s ! -o %s -j MASQUERADE",
 		subnet.String(), bridgeName)
 
@@ -182,8 +202,8 @@ func (b *BridgeNetworkDriver) Connect(network *Network, endpoint *Endpoint) erro
 		PeerName:  "cif-" + endpoint.ID[:5],
 	}
 
-	// LinkAdd方法创建出这个veth'接口，因为上面制定了link的MasterIndex是对应的Linux bridge网络
-	// 所以veth的另一端已经挂载了网路对应的Linux Bridge上
+	// LinkAdd方法创建出这个veth接口，因为上面制定了link的MasterIndex是对应的Linux bridge网络
+	// 所以veth的一端已经挂载了网路对应的Linux Bridge上
 	if err = netlink.LinkAdd(&endpoint.Device); err != nil {
 		return fmt.Errorf("error Add Endpoint Device: %v", err)
 	}
@@ -197,5 +217,5 @@ func (b *BridgeNetworkDriver) Connect(network *Network, endpoint *Endpoint) erro
 
 // 从网络上移除容器的网络端点
 func (b *BridgeNetworkDriver) Disconnect(network Network, endpoint *Endpoint) error {
-	panic("not implemented") // TODO: Implement
+	return nil
 }

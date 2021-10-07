@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -10,6 +11,7 @@ import (
 	"github.com/devhg/ddocker/cgroups"
 	"github.com/devhg/ddocker/cgroups/subsystems"
 	"github.com/devhg/ddocker/container"
+	"github.com/devhg/ddocker/network"
 	"github.com/devhg/ddocker/util"
 )
 
@@ -53,6 +55,14 @@ var RunCommand = cli.Command{
 			Name:  "e",
 			Usage: "set environment",
 		},
+		cli.StringFlag{
+			Name:  "net",
+			Usage: "container network",
+		},
+		cli.StringSliceFlag{
+			Name:  "p",
+			Usage: "port mapping",
+		},
 	},
 	/*
 		1. 判断参数是否包含command
@@ -92,7 +102,13 @@ var RunCommand = cli.Command{
 		env := ctx.StringSlice("e")
 		logrus.Infof("create env [%v]", env)
 
-		run(tty, commands, resConf, containerName, volumes, imageName, env) // volume 临时放在这里
+		network := ctx.String("net")
+		logrus.Infof("create net [%v]", network)
+
+		portMapping := ctx.StringSlice("p")
+		logrus.Infof("create portMapping [%v]", portMapping)
+
+		run(tty, commands, resConf, containerName, volumes, imageName, env, network, portMapping) // volume 临时放在这里
 		return nil
 	},
 }
@@ -100,7 +116,8 @@ var RunCommand = cli.Command{
 // run 这里是真正开始之前创建好的command调用，它首先会clone出来一个namespace隔离的
 // 进程，然后在子进程中调用/proc/self/exe，也就是自己调用自己，发送init参数，
 // 调用之前写的init方法，去初始化一些容器的参数，
-func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume, image string, env []string) {
+func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volume, image string, env []string,
+	netName string, portMapping []string) {
 	// 首先生成长度为10的容器id
 	id := util.RandStringBytes(10)
 
@@ -134,6 +151,23 @@ func run(tty bool, commands []string, res *subsystems.ResourceConfig, name, volu
 	_ = cgroupManager.Apply(parentProcess.Process.Pid)
 	if err != nil {
 		panic(err)
+	}
+
+	if netName != "" {
+		// config container network
+		if err := network.Init(); err != nil {
+			panic(err)
+		}
+		cinfo := &container.ContainerInfo{
+			ID:          containerID,
+			PID:         strconv.Itoa(parentProcess.Process.Pid),
+			Name:        name,
+			PortMapping: portMapping,
+		}
+		if err := network.Connect(netName, cinfo); err != nil {
+			logrus.Errorf("error Connect Network %v", err)
+			return
+		}
 	}
 
 	// 初始化容器

@@ -82,9 +82,10 @@ func (ia *IPAM) Allocate(subnet *net.IPNet) (ip net.IP, err error) {
 	ia.Subnets = make(map[string]string)
 
 	if err = ia.load(); err != nil {
-		fmt.Println(err)
 		logrus.Infof("load IPAM allocation info error: %v", err)
 	}
+
+	_, subnet, _ = net.ParseCIDR(subnet.String())
 
 	// 返回网段的子网掩码的总长度 和 网段前面的固定定位的长度
 	// "127.0.0.1/8" 子网掩码是 "255.0.0.0"。返回值就是 8 和 32
